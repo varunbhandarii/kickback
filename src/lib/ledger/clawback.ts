@@ -6,16 +6,16 @@ import { loadMerchant, type Merchant } from "../merchants";
 import { enqueue, rewardNetCents } from "../rewards/enqueue";
 import { lockCustomer, lockMerchant } from "./locks";
 import { recomputeVisit } from "./record-capture";
-export async function addClawbackOffset(tx: Tx, reward: typeof rewards.$inferSelect) {
-  const amount = rewardNetCents(reward);
-  if (amount > 0) await tx.insert(offsets).values({ merchantId: reward.merchantId, customerKey: reward.customerKey, amountCents: amount, remainingCents: amount, sourceRewardId: reward.id, kind: "DEBIT" }).onConflictDoNothing();
+export async function addClawbackOffset(tx: Tx, reward: typeof rewards.$inferSelect, amount = reward.amountCents) {
+  if (amount > 0) await tx.insert(offsets).values({ merchantId: reward.merchantId, customerKey: reward.customerKey, amountCents: amount, remainingCents: amount, sourceRewardId: reward.id, kind: "DEBIT" }).onConflictDoUpdate({ target: [offsets.sourceRewardId,offsets.kind],set: { amountCents: sql`greatest(${offsets.amountCents},${amount})`,remainingCents: sql`${offsets.remainingCents}+greatest(0,${amount}-${offsets.amountCents})` } });
 }
 export async function invalidateVisit(tx: Tx, merchant: Merchant, visitId: string) {
-  await tx.update(visits).set({ status: "VOID" }).where(eq(visits.id,visitId));
+  await tx.update(visits).set({ status: "VOID" }).where(and(eq(visits.id,visitId),eq(visits.merchantId,merchant.id)));
   const related = await tx.select().from(rewards).where(and(eq(rewards.merchantId,merchant.id),or(eq(rewards.visitId,visitId),sql`${visitId}::uuid = any(${rewards.basisVisitIds})`))).for("update");
   for (const reward of related) {
-    if (["SENT","CONFIRMED"].includes(reward.state)) await addClawbackOffset(tx,reward);
-    else if (["EARNED","SCHEDULED","HELD","DEFERRED"].includes(reward.state)) {
+    if (["SENT","CONFIRMED","OFFSET"].includes(reward.state)) await addClawbackOffset(tx,reward);
+    else if (["EARNED","SCHEDULED","HELD","DEFERRED","FAILED"].includes(reward.state)) {
+      await addClawbackOffset(tx,reward,reward.offsetAppliedCents);
       await tx.update(rewards).set({ state: "CANCELLED", reason: "CLAWBACK", lockedAt: null, lockedBy: null }).where(eq(rewards.id,reward.id));
       await tx.update(offsets).set({ remainingCents: 0 }).where(and(eq(offsets.sourceRewardId,reward.id),eq(offsets.kind,"CREDIT")));
     } else if (reward.state === "SENDING") await tx.update(rewards).set({ reason: "IN_FLIGHT_CLAWBACK" }).where(eq(rewards.id,reward.id));

@@ -18,6 +18,8 @@ Pending refunds become `SENT`; completed provider results become `CONFIRMED`. Ve
 
 Clawback debits and deferred credits have distinct kinds. Gross rewards stay positive; offsets reduce payable amounts and can produce `OFFSET` without an API call. Foreign refunds adjust eligibility. Invalidated cycles cancel unpaid rewards or create a debit once for paid rewards. Disputes freeze the customer; all cases must resolve for the seller before automatic unfreezing. Revoked consent pauses checkout and rewards.
 
+A returned cycle also restores any debt its reward had offset. A paid or fully offset cycle restores the gross benefit; a cancelled unpaid reward restores only the offset it consumed. Duplicate returns cannot restore that debt twice. Dispute resolution releases rewards held during the case, while a reversed capture keeps the customer frozen.
+
 ## Webhooks and transport
 
 Signature verification uses original bytes, CRC32, and RSA-SHA256. Certificates are cached and fetched only from exact PayPal HTTPS API hosts and certificate paths; failures fall back to PayPal postback. Receipt and raw payload commit together. Processing claims, attempts, errors, and completion are separate from event-ID deduplication; the worker retries incomplete dispatch.

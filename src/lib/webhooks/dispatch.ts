@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { captures, connections, customers, disputes, merchants, orders, rawEvents, refundReceipts, rewards, webhookEvents } from "@/db/schema";
 import { audit } from "../audit";
@@ -11,7 +11,7 @@ import type { WebhookEvent } from "../paypal/webhooks";
 import { enqueue, rewardNetCents } from "../rewards/enqueue";
 import { settleReward } from "../rewards/executor";
 
-type Resource = { id?: string; status?: string; custom_id?: string; merchant_id?: string; amount?: { value: string; currency_code: string }; update_time?: string; supplementary_data?: { related_ids?: { order_id?: string; capture_id?: string } }; links?: { rel: string; href: string }[]; disputed_transactions?: { seller_transaction_id?: string }[]; dispute_outcome?: { outcome_code?: string } };
+type Resource = { id?: string; dispute_id?: string; status?: string; custom_id?: string; merchant_id?: string; amount?: { value: string; currency_code: string }; update_time?: string; supplementary_data?: { related_ids?: { order_id?: string; capture_id?: string } }; links?: { rel: string; href: string }[]; disputed_transactions?: { seller_transaction_id?: string }[]; dispute_outcome?: { outcome_code?: string } };
 function captureLink(resource: Resource) { const href = resource.links?.find((l) => l.rel === "up")?.href; if (!href) return undefined; const url = new URL(href); if (!/^(api|api-m)\.(sandbox\.)?paypal\.com$/.test(url.hostname)) return undefined; return url.pathname.match(/^\/v2\/payments\/captures\/([A-Z0-9]+)$/)?.[1]; }
 async function merchantById(id: string) { const [row] = await getDb().select().from(merchants).where(eq(merchants.id,id)); return row ? loadMerchant(row.slug,true) : undefined; }
 async function knownCapture(id: string) { const [capture] = await getDb().select().from(captures).where(eq(captures.id,id)); return capture; }
@@ -66,9 +66,10 @@ async function disputeEvent(merchant: Merchant, captureId: string, disputeId: st
     const sellerWon = ["RESOLVED_SELLER_FAVOUR","RESOLVED_SELLER_FAVOR"].includes(outcome);
     if (resolved && sellerWon) {
       const cases = await tx.select().from(disputes).where(and(eq(disputes.merchantId,merchant.id),eq(disputes.customerKey,capture.customerKey)));
-      if (cases.every((c) => c.status === "RESOLVED" && ["RESOLVED_SELLER_FAVOUR","RESOLVED_SELLER_FAVOR"].includes(c.outcome ?? ""))) {
+      const reversed = await tx.select({ id: captures.id }).from(captures).where(and(eq(captures.merchantId,merchant.id),eq(captures.customerKey,capture.customerKey),eq(captures.status,"REVERSED"))).limit(1);
+      if (!reversed.length && cases.every((c) => c.status === "RESOLVED" && ["RESOLVED_SELLER_FAVOUR","RESOLVED_SELLER_FAVOR"].includes(c.outcome ?? ""))) {
         await tx.update(customers).set({ status: "OK",updatedAt: new Date() }).where(and(eq(customers.merchantId,merchant.id),eq(customers.key,capture.customerKey),eq(customers.status,"FROZEN")));
-        await tx.update(rewards).set({ state: "SCHEDULED",settleAt: new Date(),reason: "DISPUTE_RESOLVED" }).where(and(eq(rewards.merchantId,merchant.id),eq(rewards.customerKey,capture.customerKey),eq(rewards.state,"HELD"),eq(rewards.reason,"DISPUTE")));
+        await tx.update(rewards).set({ state: "SCHEDULED",settleAt: new Date(),reason: "DISPUTE_RESOLVED" }).where(and(eq(rewards.merchantId,merchant.id),eq(rewards.customerKey,capture.customerKey),eq(rewards.state,"HELD"),inArray(rewards.reason,["DISPUTE","CUSTOMER_FROZEN","TRANSACTION_DISPUTED","REFUND_NOT_PERMITTED_DUE_TO_CHARGEBACK"])));
       }
     } else {
       await tx.update(customers).set({ status: "FROZEN",updatedAt: new Date() }).where(and(eq(customers.merchantId,merchant.id),eq(customers.key,capture.customerKey)));
@@ -100,6 +101,7 @@ export async function dispatch(event: WebhookEvent,deadline = Date.now()+20000) 
         let [reward] = await getDb().select().from(rewards).where(eq(rewards.refundId,resource.id));
         if (!reward && /^KICKBACK:R:[0-9a-f-]{36}$/i.test(resource.custom_id ?? "")) [reward] = await getDb().select().from(rewards).where(eq(rewards.id,resource.custom_id!.slice(11)));
         if (reward) {
+          if (resource.amount && resource.amount.currency_code !== "USD") throw new Error("Reward webhook currency mismatch");
           const captureId = captureLink(resource) ?? resource.supplementary_data?.related_ids?.capture_id;
           if (captureId && captureId !== reward.captureId) throw new Error("Reward webhook capture mismatch");
           const amount = resource.amount ? parseCents(resource.amount.value) : rewardNetCents(reward);
@@ -120,8 +122,8 @@ export async function dispatch(event: WebhookEvent,deadline = Date.now()+20000) 
       } else if (type === "PAYMENT.CAPTURE.REVERSED" && resource.id) {
         const capture = await resolveCapture(resource.id,deadline), merchant = capture ? await merchantById(capture.merchantId) : undefined;
         if (merchant && capture) await foreignRefund(merchant,capture.id,`reversal:${resource.id}`,capture.refundableCents || capture.amountCents,true);
-      } else if (type.startsWith("CUSTOMER.DISPUTE.") && resource.id) {
-        for (const transaction of resource.disputed_transactions ?? []) { if (!transaction.seller_transaction_id) continue; const capture = await resolveCapture(transaction.seller_transaction_id,deadline), merchant = capture ? await merchantById(capture.merchantId) : undefined; if (merchant) { const at = new Date(resource.update_time ?? String(event.create_time ?? new Date().toISOString())); await disputeEvent(merchant,transaction.seller_transaction_id,resource.id,type,resource,at); } }
+      } else if (type.startsWith("CUSTOMER.DISPUTE.") && (resource.dispute_id ?? resource.id)) {
+        for (const transaction of resource.disputed_transactions ?? []) { if (!transaction.seller_transaction_id) continue; const capture = await resolveCapture(transaction.seller_transaction_id,deadline), merchant = capture ? await merchantById(capture.merchantId) : undefined; if (merchant) { const at = new Date(resource.update_time ?? String(event.create_time ?? new Date().toISOString())); await disputeEvent(merchant,transaction.seller_transaction_id,(resource.dispute_id ?? resource.id)!,type,resource,at); } }
       } else if (type === "MERCHANT.PARTNER-CONSENT.REVOKED") {
         const paypalId = resource.merchant_id ?? resource.id;
         const rows = await getDb().select().from(connections).where(eq(connections.merchantIdInPayPal,paypalId ?? ""));

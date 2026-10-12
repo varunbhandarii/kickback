@@ -59,7 +59,7 @@ export async function settleReward(id: string, deps: ExecutorDependencies = {}) 
     }
     if (candidates.some((c) => c.status === "PENDING")) return change(Date.now()-row.createdAt.getTime() >= 72*3600000 ? "CANCELLED" : "SCHEDULED",Date.now()-row.createdAt.getTime() >= 72*3600000 ? "PENDING_TOO_LONG" : "PENDING_CAPTURE",15*60000);
     if (candidates.length && candidates.every((c) => c.capturedAt.getTime() < Date.now()-180*86400000)) return change("CANCELLED","TOO_OLD");
-    await tx.insert(offsets).values({ merchantId: row.merchantId, customerKey: row.customerKey, amountCents: amount, remainingCents: amount, sourceRewardId: row.id, kind: "CREDIT" }).onConflictDoNothing();
+    await tx.insert(offsets).values({ merchantId: row.merchantId, customerKey: row.customerKey, amountCents: amount, remainingCents: amount, sourceRewardId: row.id, kind: "CREDIT" }).onConflictDoUpdate({ target: [offsets.sourceRewardId,offsets.kind],set: { amountCents: amount,remainingCents: amount } });
     return change("DEFERRED","NO_REFUNDABLE_CAPTURE");
   });
   if (!prepared) return { claimed: true, sent: false };
@@ -89,11 +89,11 @@ export async function settleReward(id: string, deps: ExecutorDependencies = {}) 
         const alternatives = await tx.select().from(captures).where(and(eq(captures.visitId,row.visitId),inArray(captures.status,["COMPLETED","PARTIALLY_REFUNDED"])));
         const next = alternatives.find((c) => c.id !== row.captureId && c.refundableCents >= rewardNetCents(row) && c.refundCount < 25);
         if (next) { state = "SCHEDULED"; captureId = next.id; requestId = randomUUID(); }
-        else await tx.insert(offsets).values({ merchantId: row.merchantId, customerKey: row.customerKey, amountCents: rewardNetCents(row), remainingCents: rewardNetCents(row), sourceRewardId: row.id, kind: "CREDIT" }).onConflictDoNothing();
+        else await tx.insert(offsets).values({ merchantId: row.merchantId, customerKey: row.customerKey, amountCents: rewardNetCents(row), remainingCents: rewardNetCents(row), sourceRewardId: row.id, kind: "CREDIT" }).onConflictDoUpdate({ target: [offsets.sourceRewardId,offsets.kind],set: { amountCents: rewardNetCents(row),remainingCents: rewardNetCents(row) } });
       }
       if (action.freeze) await tx.update(customers).set({ status: "FROZEN", updatedAt: new Date() }).where(and(eq(customers.merchantId,row.merchantId),eq(customers.key,row.customerKey)));
       const uncertain = !(error instanceof PayPalApiError) || [409,429].includes(error.status) || error.status >= 500;
-      await tx.update(rewards).set({ state, captureId, requestId, sendUncertain: action.reason === "PAUSED" ? false : uncertain, reason: action.reason, lastError: action.reason, settleAt: new Date(Date.now()+(action.delayMs ?? 0)), lockedAt: null, lockedBy: null }).where(eq(rewards.id,id));
+      await tx.update(rewards).set({ state, captureId, requestId, sendUncertain: action.reason === "PAUSED" ? claimed.sendUncertain : uncertain, reason: action.reason, lastError: action.reason, settleAt: new Date(Date.now()+(action.delayMs ?? 0)), lockedAt: null, lockedBy: null }).where(eq(rewards.id,id));
       await audit(tx,row.merchantId,"reward.attempt_result",id,{ state,reason: action.reason,debug_id: action.debugId });
       transitionLog(id,"SENDING",state,action.reason,action.debugId);
     });

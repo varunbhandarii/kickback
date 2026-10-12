@@ -5,6 +5,7 @@ const oauth = () => Response.json({ access_token: "test-token", expires_in: 120,
 const config = { clientId: "partner", clientSecret: "secret", environment: "sandbox" as const };
 const noPacing = async () => {};
 describe("PayPal transport", () => {
+  it("sends multipart dispute input without forcing a JSON content type",async () => { const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(oauth()).mockResolvedValueOnce(Response.json({ dispute_id: "CASE1" })); const client = createPayPalClient(config,{ fetch: fetcher,pace: noPacing }), form = new FormData(); form.append("input",new Blob(['{"reason":"OTHER"}'],{ type: "application/json" })); await client.request("/v1/customer/disputes",{ method: "POST",body: form }); const init = fetcher.mock.calls[1][1]; expect(init?.body).toBe(form); expect(new Headers(init?.headers).has("Content-Type")).toBe(false); });
   it("uses standard padded Base64 and the required trailing dot", () => {
     const assertion = authAssertion("partner", "ABCDEFGHIJKLM");
     const [head, body, signature] = assertion.split(".");

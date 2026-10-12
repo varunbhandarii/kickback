@@ -92,11 +92,13 @@ export function createPayPalClient(config: Config, deps: Dependencies = {}) {
       Authorization: `Bearer ${(await accessToken(options.priority,options.deadline)).access_token}`,
       "Content-Type": "application/json", Prefer: "return=representation",
     };
+    const multipart = options.body instanceof FormData;
+    if (multipart) delete headers["Content-Type"];
     if (config.bnCode) headers["PayPal-Partner-Attribution-Id"] = config.bnCode;
     if (options.merchantId) headers["PayPal-Auth-Assertion"] = authAssertion(config.clientId, options.merchantId);
     if (requestId) headers["PayPal-Request-Id"] = requestId;
     if (options.mockCode) headers["PayPal-Mock-Response"] = JSON.stringify({ mock_application_codes: options.mockCode });
-    return await send(path, { method, headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) }, options.priority, options.deadline) as T;
+    return await send(path, { method, headers, body: multipart ? options.body as FormData : options.body === undefined ? undefined : JSON.stringify(options.body) }, options.priority, options.deadline) as T;
   }
   return { request, accessToken };
 }

@@ -29,8 +29,9 @@ export async function recordCapture({ merchant, order, source, demoVisitAt }: { 
   const unit = order.purchase_units?.[0], capture = unit?.payments?.captures?.[0];
   if (!capture || capture.amount.currency_code !== "USD") throw new Error("USD capture required");
   const amountCents = parseCents(capture.amount.value), feeCents = capture.seller_receivable_breakdown?.paypal_fee ? parseCents(capture.seller_receivable_breakdown.paypal_fee.value) : 0;
-  const wallet = order.payment_source?.venmo ? "VENMO" : "PAYPAL", accountId = order.payment_source?.[wallet === "VENMO" ? "venmo" : "paypal"]?.account_id ?? order.payer?.payer_id;
-  const key = accountId ? customerKey(merchant.id,accountId) : null;
+  let wallet: "VENMO"|"PAYPAL" = order.payment_source?.venmo ? "VENMO" : "PAYPAL";
+  const accountId = order.payment_source?.[wallet === "VENMO" ? "venmo" : "paypal"]?.account_id ?? order.payer?.payer_id;
+  let key = accountId ? customerKey(merchant.id,accountId) : null;
   const capturedAt = capture.create_time ? new Date(capture.create_time) : new Date();
   if (!Number.isFinite(capturedAt.getTime())) throw new Error("Invalid capture time");
   return getDb().transaction(async (tx) => {
@@ -44,7 +45,9 @@ export async function recordCapture({ merchant, order, source, demoVisitAt }: { 
     if (unit?.payee?.merchant_id && unit.payee.merchant_id !== connection?.merchantIdInPayPal) throw new Error("Payee mismatch");
     await tx.update(orders).set({ status: order.status }).where(eq(orders.id,order.id));
     const [existing] = await tx.select().from(captures).where(eq(captures.id,capture.id)).for("update");
-    if (existing && (existing.orderId !== order.id || existing.merchantId !== merchant.id || (existing.customerKey !== null && existing.customerKey !== key) || existing.amountCents !== amountCents)) throw new Error("Capture context mismatch");
+    if (existing && (existing.orderId !== order.id || existing.merchantId !== merchant.id || (existing.customerKey !== null && key !== null && existing.customerKey !== key) || existing.amountCents !== amountCents)) throw new Error("Capture context mismatch");
+    if (!key && existing?.customerKey) { key = existing.customerKey; await lockCustomer(tx,merchant.id,key); }
+    if (!order.payment_source?.paypal && !order.payment_source?.venmo && existing) wallet = existing.wallet;
     if (key) {
       await tx.insert(customers).values({ merchantId: merchant.id, key, wallets: [wallet], firstSeen: visitAt, lastSeen: visitAt }).onConflictDoNothing();
       const [customer] = await tx.select().from(customers).where(and(eq(customers.merchantId,merchant.id),eq(customers.key,key)));
@@ -72,7 +75,7 @@ export async function recordCapture({ merchant, order, source, demoVisitAt }: { 
 export async function markCaptureStatus(merchant: Merchant, captureId: string, incoming: string) {
   return getDb().transaction(async (tx) => {
     await lockMerchant(tx,merchant.id);
-    const [capture] = await tx.select().from(captures).where(eq(captures.id,captureId));
+    const [capture] = await tx.select().from(captures).where(and(eq(captures.id,captureId),eq(captures.merchantId,merchant.id)));
     if (!capture) return undefined;
     if (capture.customerKey) await lockCustomer(tx,merchant.id,capture.customerKey);
     await tx.update(captures).set({ status: nextCaptureStatus(capture.status,incoming), updatedAt: new Date() }).where(eq(captures.id,captureId));
