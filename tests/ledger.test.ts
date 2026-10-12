@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb } from "@/db";
-import { captures, customers, orders, visits } from "@/db/schema";
+import { captures, customers, orders, refundReceipts, visits } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { recordCapture, markCaptureStatus } from "@/lib/ledger/record-capture";
 import { customerKey, encryptSecret, decryptSecret } from "@/lib/crypto/tenant";
 import { setupDb, teardownDb, resetDb, fixture, purchase } from "./helpers/db";
 beforeAll(setupDb,30000); afterAll(teardownDb); beforeEach(resetDb);
 describe("capture ledger",() => {
+  it("applies an earlier foreign refund even when a capture has no identity",async () => { const merchant = await fixture(); await getDb().insert(refundReceipts).values({ id: "UNKNOWN_REFUND",captureId: "CUNKNOWN123",amountCents: 550,kind: "FOREIGN",status: "COMPLETED" }); const { result } = await purchase(merchant,{ id: "UNKNOWN123",account: null }); expect(result).toMatchObject({ recognized: false,captureStatus: "REFUNDED" }); expect(await getDb().select().from(captures)).toMatchObject([{ refundableCents: 0,foreignRefundedCents: 550,refundCount: 1 }]); });
   it("isolates identity by merchant and rejects missing IDs",() => { expect(customerKey("a","buyer")).toHaveLength(22); expect(customerKey("a","buyer")).toBe(customerKey("a","buyer")); expect(customerKey("a","buyer")).not.toBe(customerKey("b","buyer")); expect(() => customerKey("a","")).toThrow(); });
   it("authenticates encrypted secrets",() => { const encrypted = encryptSecret("secret"); expect(decryptSecret(encrypted)).toBe("secret"); encrypted[20] ^= 1; expect(() => decryptSecret(encrypted)).toThrow(); });
   it("deduplicates capture responses",async () => { const merchant = await fixture(), { order } = await purchase(merchant); await recordCapture({ merchant,order,source: "WEBHOOK" }); expect(await getDb().select().from(captures)).toHaveLength(1); expect(await getDb().select().from(visits)).toMatchObject([{ amountCents: 550 }]); });

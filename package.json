@@ -9,6 +9,7 @@
     "pause": "tsx scripts/pause.ts pause",
     "resume": "tsx scripts/pause.ts resume",
     "check:concurrency": "tsx scripts/check-concurrency.ts",
+    "check:ledger": "tsx scripts/check-ledger.ts",
     "env:init": "node scripts/init-env.mjs",
     "jobs": "tsx scripts/jobs.ts",
     "typecheck": "next typegen && tsc --noEmit",

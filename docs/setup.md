@@ -77,6 +77,7 @@ npm run typecheck
 npm run lint
 npm run build
 npm run check:concurrency
+npm run check:ledger
 ```
 
-PGlite runs database unit tests; the concurrency check uses real Postgres. Before live use, establish provider approval, retention/consent decisions, and applicable deployment licenses. The current demo is sandbox-only.
+PGlite runs database unit tests; the concurrency and ledger checks use real Postgres. The ledger check exercises timestamp encoding, merging, and enqueue without provider calls. Before live use, establish provider approval, retention/consent decisions, and applicable deployment licenses. The current demo is sandbox-only.

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { getDb, type Tx } from "@/db";
 import { captures, connections, customers, orders, visits } from "@/db/schema";
 import { customerKey } from "../crypto/tenant";
@@ -56,20 +56,21 @@ export async function recordCapture({ merchant, order, source, demoVisitAt }: { 
     let visitId = existing?.visitId;
     if (!visitId && key) {
       const cutoff = new Date(visitAt.getTime()-merchant.spec.mergeWindowMin*60000);
-      const [latest] = await tx.select().from(visits).where(and(eq(visits.merchantId,merchant.id),eq(visits.customerKey,key),inArray(visits.status,["COMPLETED","PENDING"]),sql`${visits.lastCaptureAt} >= ${cutoff}`,sql`${visits.startedAt} <= ${new Date(visitAt.getTime()+merchant.spec.mergeWindowMin*60000)}`)).orderBy(desc(visits.lastCaptureAt)).limit(1).for("update");
+      const [latest] = await tx.select().from(visits).where(and(eq(visits.merchantId,merchant.id),eq(visits.customerKey,key),inArray(visits.status,["COMPLETED","PENDING"]),gte(visits.lastCaptureAt,cutoff),lte(visits.startedAt,new Date(visitAt.getTime()+merchant.spec.mergeWindowMin*60000)))).orderBy(desc(visits.lastCaptureAt)).limit(1).for("update");
       if (latest) { visitId = latest.id; await tx.update(visits).set({ startedAt: new Date(Math.min(latest.startedAt.getTime(),visitAt.getTime())), lastCaptureAt: new Date(Math.max(latest.lastCaptureAt.getTime(),visitAt.getTime())) }).where(eq(visits.id,latest.id)); }
       else { const [visit] = await tx.insert(visits).values({ merchantId: merchant.id, customerKey: key, startedAt: visitAt, lastCaptureAt: visitAt, amountCents: 0, status: capture.status === "PENDING" ? "PENDING" : "COMPLETED", source }).returning(); visitId = visit.id; }
     }
     const status = existing ? nextCaptureStatus(existing.status,capture.status) : capture.status;
     if (!existing) await tx.insert(captures).values({ id: capture.id, merchantId: merchant.id, orderId: order.id, visitId, customerKey: key, wallet, amountCents, feeCents, refundableCents: status === "REFUNDED" ? 0 : amountCents, status, capturedAt });
     else await tx.update(captures).set({ status,customerKey: key,visitId,wallet: existing.customerKey ? existing.wallet : wallet, feeCents: feeCents || existing.feeCents, updatedAt: new Date() }).where(eq(captures.id,capture.id));
-    if (!key || !visitId) return { recognized: false as const, captureId: capture.id, captureStatus: status, wallet };
     await (await import("./clawback")).reconcilePendingRefunds(tx,merchant,capture.id);
+    const [current] = await tx.select({ status: captures.status }).from(captures).where(eq(captures.id,capture.id));
+    if (!key || !visitId) return { recognized: false as const, captureId: capture.id, captureStatus: current.status, wallet };
     const visit = await recomputeVisit(tx,visitId);
     if (status === "COMPLETED" && existing?.status !== "COMPLETED") await awakenDeferred(tx,merchant.id,key,capture.id);
     const evaluation = await enqueue(tx,merchant,key);
     const reward = evaluation.rewards.find((r) => r.visitId === visit.id) ?? (evaluation.latestReward?.visitId === visit.id ? evaluation.latestReward : undefined);
-    return { recognized: true as const, customerKey: key, visit, captureId: capture.id, captureStatus: status, wallet, progress: evaluation.progress, reward, rewardIds: evaluation.rewards.filter((r) => r.state === "SCHEDULED").map((r) => r.id) };
+    return { recognized: true as const, customerKey: key, visit, captureId: capture.id, captureStatus: current.status, wallet, progress: evaluation.progress, reward, rewardIds: evaluation.rewards.filter((r) => r.state === "SCHEDULED").map((r) => r.id) };
   });
 }
 export async function markCaptureStatus(merchant: Merchant, captureId: string, incoming: string) {

@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { captures, connections, customers, disputes, merchants, orders, rawEvents, refundReceipts, rewards, webhookEvents } from "@/db/schema";
+import { captures, connections, customers, disputes, merchants, orders, rawEvents, refundReceipts, rewards, settings, webhookEvents } from "@/db/schema";
 import { audit } from "../audit";
 import { applyRewardRefund, foreignRefund, invalidateVisit } from "../ledger/clawback";
 import { lockCustomer, lockMerchant } from "../ledger/locks";
@@ -30,7 +30,10 @@ async function recordUnknown(orderId: string, resource: Resource, eventType: str
     const unit = order.purchase_units?.[0];
     if (unit?.custom_id !== resource.custom_id || unit.payee?.merchant_id !== ctx.connection.merchantIdInPayPal) return;
     const capture = unit.payments?.captures?.[0]; if (!capture) throw new Error("Capture not yet readable");
-    const [row] = await getDb().insert(orders).values({ id: orderId,merchantId,requestId,wallet: order.payment_source?.venmo ? "VENMO" : "PAYPAL",amountCents: parseCents(capture.amount.value),status: order.status }).onConflictDoNothing().returning();
+    const [reservation] = await getDb().select().from(settings).where(eq(settings.key,`order:${merchantId}:${requestId}`));
+    const clock = reservation?.value as { demoVisitAt?: string } | undefined;
+    const fixtureAt = clock?.demoVisitAt ? new Date(clock.demoVisitAt) : undefined;
+    const [row] = await getDb().insert(orders).values({ id: orderId,merchantId,requestId,wallet: order.payment_source?.venmo ? "VENMO" : "PAYPAL",amountCents: parseCents(capture.amount.value),status: order.status,demoVisitAt: fixtureAt }).onConflictDoNothing().returning();
     stored = row ?? (await getDb().select().from(orders).where(eq(orders.id,orderId)))[0];
   }
   if (!stored) return;
@@ -39,7 +42,7 @@ async function recordUnknown(orderId: string, resource: Resource, eventType: str
   const ctx = await connectionContext(merchant.id);
   const order = fetchedOrder ?? await ctx.client.request<CaptureOrder>(`/v2/checkout/orders/${orderId}`,{ merchantId: ctx.assertionMerchantId, priority: "high",deadline });
   const result = await recordCapture({ merchant,order,source: "WEBHOOK" });
-  if (eventType.endsWith("PENDING") && result.captureStatus !== "COMPLETED") await markCaptureStatus(merchant,result.captureId,"PENDING");
+  if (/^PAYMENT\.CAPTURE\.(COMPLETED|PENDING|DECLINED|DENIED)$/.test(eventType)) await markCaptureStatus(merchant,result.captureId,eventType.split(".").at(-1)!);
   return result;
 }
 async function resolveCapture(id: string, deadline: number) {

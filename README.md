@@ -58,6 +58,7 @@ npm run typecheck
 npm run lint
 npm run build
 npm run check:concurrency
+npm run check:ledger
 npm run jobs
 npm run pause -- rosas
 npm run resume -- rosas

@@ -79,8 +79,11 @@ export function createPayPalClient(config: Config, deps: Dependencies = {}) {
       if (!body.access_token || !Number.isFinite(body.expires_in)) throw new Error("Invalid PayPal OAuth response");
       token = { access_token: body.access_token, expiresAt: now() + Math.max(0, body.expires_in - 60) * 1000, scope: body.scope };
       return token;
-    })();
-    try { return await tokenPromise; } finally { tokenPromise = undefined; }
+    })().finally(() => { tokenPromise = undefined; });
+    if (!deadline) return tokenPromise;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { return await Promise.race([tokenPromise,new Promise<never>((_,reject) => { timer = setTimeout(() => reject(new Error("PayPal request deadline reached")),Math.max(0,deadline-now())); })]); }
+    finally { if (timer) clearTimeout(timer); }
   }
 
   async function request<T = unknown>(path: string, options: PayPalOptions = {}): Promise<T> {
