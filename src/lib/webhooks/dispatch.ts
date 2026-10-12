@@ -93,7 +93,8 @@ export async function dispatch(event: WebhookEvent,deadline = Date.now()+20000) 
       if (type === "CHECKOUT.ORDER.APPROVED" && resource.id) await getDb().update(orders).set({ status: "APPROVED" }).where(and(eq(orders.id,resource.id),sql`${orders.status} not in ('COMPLETED','VOIDED')`));
       else if (/^PAYMENT\.CAPTURE\.(COMPLETED|PENDING|DECLINED|DENIED)$/.test(type) && resource.id) {
         const capture = await knownCapture(resource.id), merchant = capture ? await merchantById(capture.merchantId) : undefined;
-        if (merchant) await markCaptureStatus(merchant,resource.id,type.split(".").at(-1)!);
+        if (merchant && capture?.customerKey) await markCaptureStatus(merchant,resource.id,type.split(".").at(-1)!);
+        else if (merchant && capture) await recordUnknown(capture.orderId,resource,type,deadline);
         else if (resource.supplementary_data?.related_ids?.order_id) await recordUnknown(resource.supplementary_data.related_ids.order_id,resource,type,deadline);
       } else if (["PAYMENT.CAPTURE.REFUNDED","PAYMENT.REFUND.FAILED","PAYMENT.REFUND.PENDING"].includes(type) && resource.id) {
         let [reward] = await getDb().select().from(rewards).where(eq(rewards.refundId,resource.id));
