@@ -4,3 +4,31 @@
 body { background: var(--background); color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: 0.6; }
+.pay-shell { max-width: 520px; margin: auto; padding: 28px 20px 48px; }
+.pay-brand { display: flex; justify-content: space-between; font-size: 12px; letter-spacing: .12em; font-weight: 800; color: #36654f; }
+.pay-brand span { letter-spacing: .04em; font-weight: 500; color: #68746f; }
+.pay-shell header { margin: 36px 0 24px; }
+.pay-eyebrow { color: #68746f; font-size: 13px; margin-bottom: 8px; }
+.pay-shell header h1 { font-size: 36px; font-weight: 750; letter-spacing: -.04em; margin-bottom: 12px; line-height: 1.15; }
+.pay-card { border: 1px solid #dde4df; border-radius: 20px; padding: 24px; background: #fafcf9; }
+.pay-card h2, .pay-thanks h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.pay-menu { display: grid; gap: 10px; }
+.pay-menu button { display: flex; justify-content: space-between; border: 1px solid #dce3dc; border-radius: 12px; padding: 14px; background: white; text-align: left; }
+.pay-menu button[aria-pressed=true] { border-color: #36654f; box-shadow: 0 0 0 1px #36654f; background: #edf4ec; }
+.pay-amount { display: grid; gap: 6px; margin-top: 16px; }
+.pay-amount input { border: 1px solid #8da293; border-radius: 10px; padding: 12px; background: white; }
+.pay-wallets { display: grid; gap: 12px; margin: 24px 0 16px; }
+.pay-card [role=status] { font-size: 13px; color: #526059; line-height: 1.5; }
+.pay-retry { border: 1px solid #36654f; border-radius: 10px; padding: 10px 16px; margin-top: 16px; }
+.pay-thanks { background: #edf4ec; padding: 24px; border-radius: 20px; margin-top: 24px; }
+.pay-thanks progress { width: 100%; accent-color: #36654f; margin-top: 16px; }
+.pay-shell footer { font-size: 12px; line-height: 1.7; color: #68746f; margin-top: 24px; }
+.pay-shell footer a { text-decoration: underline; }
+.pay-shell footer p { margin: 12px 0; }
+.terms-copy { display: grid; gap: 18px; line-height: 1.7; margin-top: 24px; }
+.print-sign { width: min(100%, 700px); margin: auto; padding: 40px; text-align: center; }
+.print-sign h1 { font-size: 40px; font-weight: 800; margin: 40px 0 24px; }
+.print-sign h2 { font-size: 30px; font-weight: 700; margin-bottom: 20px; }
+.sign-qr { width: 300px; max-width: 100%; margin: 28px auto; }
+.sign-fine { font-size: 13px; line-height: 1.7; margin-top: 28px; }
+@media print { @page { size: letter; margin: .6in; } .no-print { display: none; } .print-sign { padding: 0; } }

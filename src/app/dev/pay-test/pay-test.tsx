@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MerchantName } from "@/lib/paypal/merchants";
 type Summary = { orderId?: string; captureId?: string; captureStatus?: string; accountId?: string; wallet?: string; amount?: { value: string } };
-type Session = { start: (options: { presentationMode: "auto" }, order: Promise<{ orderId: string }>) => Promise<void> };
+type Session = { start: (options: { presentationMode: "auto" | "redirect" }, order: Promise<{ orderId: string }>) => Promise<void> };
 type RedirectSession = Session & { hasReturned: () => boolean; resume: () => Promise<void> };
 type Callbacks = { onApprove: (data: { orderId: string }) => Promise<void>; onCancel: () => void; onError: (error: { message?: string }) => void };
 type SDK = {

@@ -1,8 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { getEnv } from "../env";
-import { merchantName } from "../paypal/merchants";
-const tokenPayload = z.object({ orderId: z.string().regex(/^[A-Z0-9]{10,32}$/), merchant: merchantName, requestId: z.uuid(), expiresAt: z.number() });
+const tokenPayload = z.object({ orderId: z.string().regex(/^[A-Z0-9]{10,32}$/), merchant: z.string().min(1).max(64), requestId: z.uuid(), expiresAt: z.number(),slug: z.string().regex(/^[a-z0-9-]{1,64}$/).optional(),wallet: z.enum(["paypal","venmo"]).optional(),amountCents: z.number().int().min(100).max(50000).optional() });
 type Payload = z.infer<typeof tokenPayload>;
 function signature(encoded: string) {
   return createHmac("sha256", Buffer.from(getEnv().KICKBACK_MASTER_KEY, "base64")).update(encoded).digest("base64url");

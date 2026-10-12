@@ -18,6 +18,10 @@ export const envSchema = z.object({
   DEMO_MODE: flag,
   KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS: flag,
   PAYPAL_CONNECTION_MODE: z.enum(["partner", "byo"]).default("partner"),
+  PG_POOL_MAX: z.coerce.number().int().min(1).max(20).default(5),
+  PAYPAL_RATE_PER_MIN: z.coerce.number().int().min(1).max(40).default(40),
+  KICKBACK_PAUSE_REWARDS: flag,
+  REWARD_SETTLE_IMMEDIATE: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
 }).superRefine((env, ctx) => {
   if (env.KICKBACK_ENV === "live" && (env.KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS || env.DEMO_MODE)) {
     ctx.addIssue({ code: "custom", message: "Sandbox tools and signature bypass are forbidden in live mode" });

@@ -1,0 +1,1 @@
+ALTER TABLE "webhook_events" ADD COLUMN "processing_at" timestamp with time zone;

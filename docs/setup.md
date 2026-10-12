@@ -1,80 +1,82 @@
 # Run Kickback
 
-Use a sandbox PayPal application. Node 24.21.0 is pinned for deployment; Node 22.12 or newer, below 25, works locally.
+Use sandbox accounts and Node 24.21.0 (>=22.12 and <25 locally).
 
 ```powershell
 npm ci
 npm run env:init
+# Edit .env: platform credentials, merchant IDs, APP_URL.
 docker compose up -d --wait
 npm run db:migrate
+npm run seed:demo
+npm run dev
 ```
 
-Edit `.env` and fill in the PayPal client ID and secret before `npm run dev`. The initializer generates a 32-byte Base64 encryption key and a job bearer token without printing them. It preserves an existing `.env`.
-
-The database listens on `127.0.0.1:55432`. Change both `POSTGRES_PORT` and `DATABASE_URL` if you need another port. For SQL access:
-
-```powershell
-docker compose exec db psql -U kickback -d kickback
-```
+The initializer preserves `.env` and generates encryption/job keys without printing them. Docker Postgres listens at `127.0.0.1:55432`. Set `APP_URL=http://localhost:3000` locally; the pay API checks the exact browser origin. Never commit secrets or rotate the master key without migrating identities and encrypted connections.
 
 ## Environment
 
 | Variable | Purpose |
 | --- | --- |
-| `KICKBACK_ENV` | `sandbox` by default; PayPal API environment |
-| `DATABASE_URL` | Postgres connection string |
-| `POSTGRES_PORT` | Local Docker host port; default 55432 |
-| `APP_URL` | Browser origin and referral return URL, e.g. http://localhost:3000 |
-| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Platform app credentials; required at server startup |
-| `PAYPAL_PARTNER_ID` | Platform account merchant ID; required for merchant status checks |
-| `PAYPAL_BN_CODE` | Optional partner attribution ID |
-| `PAYPAL_WEBHOOK_ID` | ID returned by webhook registration; receiver rejects signatures while unset |
-| `MERCHANT_ROSAS_ID`, `MERCHANT_SALON_ID`, `MERCHANT_BAKERY_ID` | Demo merchant account IDs |
-| `PAYPAL_CONNECTION_MODE` | `partner` uses platform credentials and merchant assertions; `byo` uses the merchant's app |
-| `MERCHANT_{ROSAS,SALON,BAKERY}_CLIENT_ID`, `..._CLIENT_SECRET` | Optional BYO merchant app credentials |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Optional server-side AI configuration |
-| `KICKBACK_MASTER_KEY` | Required 32 random bytes encoded as standard Base64; protects order context |
-| `JOBS_BEARER` | Required secret of at least 32 characters for the purge API |
-| `DEMO_MODE` | Enables sandbox checkout/dashboard tools; default false |
-| `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS` | Explicit simulator-only override; default false; never enable for real verification |
-| `NEXT_PUBLIC_PAYPAL_CLIENT_ID` | Optional platform public ID; checkout receives its selected app ID from the server |
-| `NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY` | Optional AG Studio license; empty shows a watermark |
+| `KICKBACK_ENV` | `sandbox`; live rejects demo tools and signature bypass |
+| `DATABASE_URL`, `POSTGRES_PORT` | Database connection/local port (55432) |
+| `APP_URL` | Browser origin, QR links, return URLs |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Platform app credentials |
+| `PAYPAL_PARTNER_ID`, `PAYPAL_BN_CODE`, `PAYPAL_WEBHOOK_ID` | Platform merchant ID, attribution, registered listener |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_ID` | Sandbox merchant IDs for seed |
+| `PAYPAL_CONNECTION_MODE` | `partner` or `byo` |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_CONNECTION_MODE` | Per-merchant mode override |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_CLIENT_ID`, `..._CLIENT_SECRET`, `..._WEBHOOK_ID` | BYO only; secret encrypted in DB |
+| `KICKBACK_MASTER_KEY` | 32 random bytes in standard Base64; identity, encryption, tokens |
+| `JOBS_BEARER` | At least 32 characters for operator APIs |
+| `PG_POOL_MAX` | Web 5; cron 2 |
+| `PAYPAL_RATE_PER_MIN` | 1–40, default 40; burst 10, per process |
+| `KICKBACK_PAUSE_REWARDS` | Global environment kill switch |
+| `REWARD_SETTLE_IMMEDIATE` | Default true; false leaves refunds to the sweep |
+| `DEMO_MODE` | Enables sandbox tools; ordinary pay routes stay available |
+| `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS` | Local simulator override only; false hosted |
+| `PAYPAL_DEMO_VAULT_ID`, `MERCHANT_{ROSAS,SALON,BAKERY}_VAULT_ID` | Private saved sandbox wallet tokens |
+| `REMOTE_JOBS_BEARER` | Hosted key for remote replay when different from local |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Optional AI configuration |
+| `NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY` | Applicable Studio deployment license |
 
-Live mode rejects the sandbox tools and signature bypass. The current application is intended for sandbox use.
+## PayPal setup
 
-## PayPal settings
-
-Create a **Platform** app in [Apps & Credentials](https://developer.paypal.com/dashboard/applications/sandbox). Enable Transaction Search and Vault. Copy the account's merchant ID into `PAYPAL_PARTNER_ID` and the app's Partner Attribution ID, if available, into `PAYPAL_BN_CODE`. Enable Log in with PayPal only if you want to check that optional integration. Its return URL is `/api/auth/paypal/return`; this endpoint does not establish a user session.
-
-For demo checkout, set `DEMO_MODE=true`, keep `KICKBACK_ENV=sandbox`, and open `/dev/pay-test`. Select `?merchant=rosas`, `salon`, or `bakery` to send a payment to a configured merchant. `platform` tests a first-party platform payment. Use US personal sandbox buyers for Venmo eligibility. Guest cards are not wired to this checkout.
-
-## Render
-
-1. Push the repository to GitHub.
-2. In Render choose **New → Blueprint**, connect the repository, and deploy `render.yaml`.
-3. Supply the platform credentials, partner ID, optional BN code and AI key. Set `APP_URL` to the final HTTPS service URL; update it after the first deployment if necessary.
-4. Render creates Postgres and a purge cron. Encryption and bearer keys are generated by Render. Keep its database URL unchanged.
-5. Confirm migrations ran in the web service's pre-deploy logs and `/api/health` returns `{ "ok": true, "env": "sandbox", "db": "ok" }`.
-6. Register the webhook from a configured local checkout:
+1. Create a sandbox Platform app in [Apps & Credentials](https://developer.paypal.com/dashboard/applications/sandbox). Copy credentials privately. “Save payment methods” is the Vault feature. Enable Transaction Search and relevant merchant features.
+2. Create US Business merchants and US Personal buyers. Sign into checkout with the sandbox buyer credentials.
+3. Populate merchant account IDs. In partner mode, approve Partner Referrals consent as each merchant and verify granted features. A seed row alone does not grant consent.
+4. Migrate and seed, then open `/pay/rosas`. `/dev/pay-test` remains a separate gated diagnostic page.
+5. Register the public HTTPS webhook listener:
 
 ```powershell
 npm run webhook:register -- https://your-app.onrender.com
 ```
 
-7. Copy the returned ID into the web service's `PAYPAL_WEBHOOK_ID` and your local `.env`. A local receiver needs its own registered URL and ID.
-8. Add the demo merchant IDs, set `DEMO_MODE=true` while testing, and redeploy. Add BYO credentials only if using that mode. Add the optional Studio license before building if you have one.
-9. Make a real sandbox payment. Logs must report `verification_status: SUCCESS`. Simulator bypass is not evidence of a verified payment.
+6. Set the returned `PAYPAL_WEBHOOK_ID`. Local/hosted listeners need separate registrations. Real deliveries must log `verification_status: SUCCESS`. Enable Negative Testing on the relevant sandbox business account before mock checks.
+7. For replay, approve saving a buyer's wallet and convert its setup token to a payment token. Store it privately. If PayPal rejects a platform token for a connected merchant, obtain a merchant-specific token.
 
-The cron connects directly to Postgres and removes expired raw payloads every 15 minutes. The equivalent HTTP API is `POST /api/jobs/purge` with `Authorization: Bearer <JOBS_BEARER>`. Postgres external access is disabled by the blueprint.
+## Render deployment
 
-## Validation
+1. Create **kickback-shared** in the Render workspace before syncing the Blueprint. Add platform credentials, partner/BN/webhook IDs, `APP_URL`, merchant IDs, `KICKBACK_ENV=sandbox`, `PAYPAL_CONNECTION_MODE=partner`, `DEMO_MODE=true`, `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS=false`, `REWARD_SETTLE_IMMEDIATE=true`, and `PAYPAL_RATE_PER_MIN=40`.
+2. Add one master key and job bearer. For an existing deployment, preserve its current values exactly. Only add merchant secrets when BYO mode is explicitly needed and authorized.
+3. Choose **New → Blueprint**, select the GitHub repository and `render.yaml`, and supply initial web values when prompted. It links web/cron to the group and creates Postgres. Set the group's `DATABASE_URL` to the database's internal URL after creation. Existing deployments use their existing URL. The web `fromDatabase` value takes precedence.
+4. Web pre-deploy runs migrations. Cron runs `npm run jobs` every five minutes with pool size 2. Web uses pool size 5 and a 60-second shutdown delay. Both require the same platform/master keys. Secrets never enter the YAML file.
+5. Verify `/api/health` gives `ok: true`; `?deep=1` adds `db: "ok"`.
+6. Seed through `POST /api/jobs/seed-demo` with `Authorization: Bearer <hosted JOBS_BEARER>`, then open `/pay/rosas`. This repeatable endpoint requires sandbox demo mode.
+7. Check a sandbox purchase, refund, verified webhooks, buyer activity, and successful cron runs. Confirm Render credits in Billing; supplying a payment card alone does not establish a credit balance.
+
+## Recovery and pause controls
+
+`npm run pause -- rosas` / `npm run resume -- rosas` change the configured database's merchant switch; use `all` globally. Hosted equivalents are bearer-authenticated `POST /api/admin/merchants/rosas/pause` (or `resume`) and `/api/admin/rewards/pause` (or `resume`). An API request already accepted by PayPal can finish after a pause.
+
+`POST /api/jobs/run` triggers recovery; `/api/jobs/purge` purges expired raw data. Sandbox-only `/api/jobs/inspect?merchant=rosas` returns minimized operator status. `/api/jobs/settle` supports refund mock/interrupted-result checks; `/api/jobs/replay-webhooks` replays already processed receipts. Every operator endpoint requires the bearer. There is no unauthenticated simulation API.
 
 ```powershell
 npm test
 npm run typecheck
 npm run lint
 npm run build
-npm run jobs
+npm run check:concurrency
 ```
 
-The standard PostCSS and Webpack build avoids experimental CSS compiler issues on Windows. AG Studio loads in a browser-only component. A successful local build checks package compatibility; Render deployment and browser testing still need to be performed with your accounts.
+PGlite runs database unit tests; the concurrency check uses real Postgres. Before live use, establish provider approval, retention/consent decisions, and applicable deployment licenses. The current demo is sandbox-only.

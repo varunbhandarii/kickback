@@ -1,0 +1,2 @@
+ALTER TABLE "rewards" ADD COLUMN "send_uncertain" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "rewards" ADD CONSTRAINT "rewards_offset_bound" CHECK ("rewards"."offset_applied_cents" >= 0 and "rewards"."offset_applied_cents" <= "rewards"."amount_cents");

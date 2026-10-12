@@ -2,40 +2,53 @@
 
 Payment-linked loyalty for small merchants on PayPal and Venmo.
 
-Kickback currently provides a sandbox checkout, verified webhook ingestion, a small database foundation, and an AG Studio demo dashboard. Loyalty rewards and merchant-facing workflows are being built.
+Pay at a merchant, collect qualifying visits, and receive a thank-you partial refund when you earn a reward. Returning wallets are recognized without a separate customer account. The current deployment uses **sandbox accounts and test balances only**.
 
-## Local setup
+## Try it
 
-Use Node 24.21.0 (or Node >=22.12 and <25), npm, and Docker Desktop.
+Open [Rosa's Cafe](https://kickback-web.onrender.com/pay/rosas), choose a menu item or custom amount, and pay using a US PayPal sandbox buyer. The thank-you screen shows your progress. Five qualifying visits within 60 days earn $2 back; purchases within 120 minutes count as one visit. Venmo appears when the device and buyer are eligible.
+
+Read the [program terms](https://kickback-web.onrender.com/pay/rosas/terms). The [printable sign](https://kickback-web.onrender.com/pay/rosas/sign) and [QR image](https://kickback-web.onrender.com/api/pay/rosas/qr.png) point to checkout.
+
+## Run locally
+
+Use Node 24.21.0 (or >=22.12 and <25), npm, and Docker Desktop.
 
 ```powershell
 npm ci
 npm run env:init
-# Fill PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in .env.
+# Fill platform credentials and demo merchant IDs in the private .env.
 docker compose up -d --wait
 npm run db:migrate
+npm run seed:demo
 npm run dev
 ```
 
-Open http://localhost:3000. Database port is 55432. See [setup](docs/setup.md) for every environment variable, sandbox account settings, and Render deployment instructions. Keep .env private; .env.example contains empty credential placeholders.
+Open http://localhost:3000/pay/rosas. See [setup](docs/setup.md) for authorization, environment variables, and Render configuration.
 
-## Demo mode (coming)
+## Demo mode
 
-For sandbox integration testing, enable DEMO_MODE=true and KICKBACK_ENV=sandbox. Open /dev/pay-test for PayPal/Venmo checkout and /dev/studio-test for a dashboard with synthetic rows. Wallet eligibility is checked through PayPal JS SDK v6. Disable these temporary tools before sharing a general deployment.
+`DEMO_MODE=true` with `KICKBACK_ENV=sandbox` enables protected replay tools. Save a sandbox wallet with the merchant's permission and keep its token private:
 
-The application does not yet award loyalty rewards. Do not use real accounts or real funds.
+```powershell
+npm run replay -- --merchant rosas --count 4 --amount 5.50 --vault <saved-wallet-token>
+```
 
-## Integrations
+Rapid purchases merge normally. Add `--historical` for explicit sandbox visit fixtures on earlier days, allowing the next browser purchase to demonstrate a reward. Actual capture timestamps remain unchanged. Add `--remote https://your-app.onrender.com` and configure `REMOTE_JOBS_BEARER` to use the hosted database. Remote batches are limited to four purchases. These tools cannot run in live mode.
 
-- PayPal Orders v2: create and capture sandbox payments, using merchant assertions for connected merchants or merchant-owned app credentials for first-party checkout.
-- PayPal Webhooks: verify signatures with PayPal, store each event once, and expire raw payloads.
-- Partner Referrals: generate merchant consent links; confirm status with merchant integrations v1.
-- AG Studio: a browser-only dashboard with synthetic data; unlicensed development displays a watermark.
-- Anthropic: server-side SDK and structured Program Designer schema with local budget/range validation.
-- Render: web service, Postgres 16, and purge cron described in render.yaml.
-- Postman and APIMatic: optional development tooling; their setup is independent of the app runtime.
+## How it works
 
-The server uses one PayPal REST transport for consistent retries, pacing, attribution, and idempotency headers. Its OAuth token cache never exposes client secrets to the browser. Learn more in [architecture](docs/architecture.md).
+```mermaid
+flowchart LR
+  Payment[PayPal or Venmo capture] --> Ledger[Merchant wallet key and visit]
+  Ledger --> Rules[Visit or spend rules]
+  Rules --> Outbox[Durable reward row]
+  Outbox --> Refund[Idempotent partial refund]
+  Refund --> Webhook[Verified webhook or reconciliation]
+  Webhook --> Progress[Reward status on the pay page]
+```
+
+The database commits a reward before an immediate background attempt. A five-minute worker recovers interrupted work. A unique reward per visit and persisted PayPal request IDs prevent duplicate payouts. Returned purchases cancel unpaid rewards or offset future rewards; disputes freeze eligibility. Merchant and global switches pause new refund attempts.
 
 ## Commands
 
@@ -44,16 +57,20 @@ npm test
 npm run typecheck
 npm run lint
 npm run build
+npm run check:concurrency
 npm run jobs
+npm run pause -- rosas
+npm run resume -- rosas
+npm run pause -- all
 npm run webhook:register -- https://your-app.onrender.com
 ```
 
-Tests cover PayPal token caching, transient retries and stable request IDs, signed capture context, and webhook verification/rejection. Production builds use the standard Tailwind PostCSS integration and Webpack.
+Tests cover calendar boundaries, identity, merging, budgets, offsets, executor errors, webhook replay, signatures, API tokens, and pacing. The concurrency check uses real sandbox Postgres and removes only its own generated rows.
 
-## Privacy
+## Integrations and privacy
 
-Webhook logs contain identifiers and statuses, not payer contact data. Raw payloads are retained with a 48-hour expiration and purged every 15 minutes. Minimal event receipts remain for duplicate protection. Sandbox privacy and terms pages are available at /privacy and /terms. The application remains a sandbox demonstration while account authorization and reward workflows are completed.
+PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10, and a 40-per-minute refill per process. AG Studio provides a separate synthetic dashboard; Anthropic provides the Program Designer schema and SDK foundation. Render hosts Next.js, Postgres, and the recovery worker.
 
-## License
+The loyalty ledger stores merchant-specific HMAC keys and payment identifiers, never provider account IDs, names, email addresses, phone numbers, or Venmo usernames. This pseudonymous ledger remains linkable; it is not a claim of anonymity or a provider-policy exemption. Raw webhook payloads expire after 47 hours and are purged every five minutes, with alerts for retention over 48 hours. Production retention, consent, provider approvals, and deployment licenses must be established before live use. See [architecture](docs/architecture.md) and [privacy](docs/privacy.md).
 
-[MIT](LICENSE)
+[MIT license](LICENSE)

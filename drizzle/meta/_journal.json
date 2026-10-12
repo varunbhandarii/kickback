@@ -8,6 +8,41 @@
       "when": 1791772205581,
       "tag": "0000_mature_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791838946987,
+      "tag": "0001_zippy_tempest",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791839725157,
+      "tag": "0002_dapper_doctor_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791841073902,
+      "tag": "0003_cool_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791841448467,
+      "tag": "0004_ambiguous_slyde",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791841746086,
+      "tag": "0005_public_shen",
+      "breakpoints": true
     }
   ]
 }

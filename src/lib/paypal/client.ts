@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { getEnv } from "../env";
 import { authAssertion } from "./auth";
+import { paceRequest, type Priority } from "./pacing";
+export { paceRequest } from "./pacing";
 
 type ErrorBody = { name?: string; message?: string; debug_id?: string; details?: { issue?: string; description?: string; field?: string }[] };
 export class PayPalApiError extends Error {
@@ -22,20 +24,12 @@ export type PayPalOptions = {
   merchantId?: string;
   requestId?: string;
   mockCode?: string;
+  priority?: Priority;
+  deadline?: number;
 };
 type Config = { clientId: string; clientSecret: string; environment: "sandbox" | "live"; bnCode?: string; retries?: number };
-type Dependencies = { fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: () => number; pace?: () => Promise<void> };
+type Dependencies = { fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: () => number; pace?: (priority?: Priority, deadline?: number) => Promise<void> };
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-let nextRequestAt = 0;
-let pacingQueue = Promise.resolve();
-export function paceRequest() {
-  const task = pacingQueue.then(async () => {
-    await sleep(Math.max(0, nextRequestAt - Date.now()));
-    nextRequestAt = Date.now() + 1500;
-  });
-  pacingQueue = task.catch(() => {});
-  return task;
-}
 
 export function createPayPalClient(config: Config, deps: Dependencies = {}) {
   const fetcher = deps.fetch ?? fetch;
@@ -46,22 +40,24 @@ export function createPayPalClient(config: Config, deps: Dependencies = {}) {
   let token: { access_token: string; expiresAt: number; scope?: string } | undefined;
   let tokenPromise: Promise<NonNullable<typeof token>> | undefined;
 
-  async function send(path: string, init: RequestInit) {
+  async function send(path: string, init: RequestInit, priority: Priority = "normal", deadline?: number) {
     for (let attempt = 0; ; attempt++) {
-      await pace();
+      if (deadline && now() >= deadline) throw new Error("PayPal request deadline reached");
+      await pace(priority,deadline);
+      if (deadline && now() >= deadline) throw new Error("PayPal request deadline reached");
       let response: Response;
-      try { response = await fetcher(`${base}${path}`, { ...init, signal: AbortSignal.timeout(15000), cache: "no-store" }); }
+      try { response = await fetcher(`${base}${path}`, { ...init, signal: AbortSignal.timeout(Math.max(1,Math.min(15000,deadline ? deadline-now() : 15000))), cache: "no-store" }); }
       catch (error) {
         if (attempt >= (config.retries ?? 3)) throw error;
-        await wait(500 * 2 ** attempt);
+        await wait(Math.min(500 * 2 ** attempt,deadline ? Math.max(0,deadline-now()) : 4000));
         continue;
       }
-      if ((response.status === 429 || response.status >= 500) && attempt < (config.retries ?? 3)) {
+      if ((response.status === 409 || response.status === 429 || response.status >= 500) && attempt < (config.retries ?? 3)) {
         const retryAfter = response.headers.get("retry-after");
         const seconds = retryAfter === null ? NaN : Number(retryAfter);
         const delay = Number.isFinite(seconds) ? seconds * 1000 : retryAfter ? Date.parse(retryAfter) - now() : 0;
         await response.arrayBuffer();
-        await wait(Math.min(300000, Math.max(500 * 2 ** attempt, Number.isFinite(delay) ? delay : 0)));
+        await wait(Math.min(deadline ? Math.max(0,deadline-now()) : 300000, Math.max(500 * 2 ** attempt, Number.isFinite(delay) ? delay : 0)));
         continue;
       }
       const raw = await response.text();
@@ -73,13 +69,13 @@ export function createPayPalClient(config: Config, deps: Dependencies = {}) {
     }
   }
 
-  async function accessToken() {
+  async function accessToken(priority: Priority = "high", deadline?: number) {
     if (token && token.expiresAt > now()) return token;
     tokenPromise ??= (async () => {
       const body = await send("/v1/oauth2/token", {
         method: "POST", headers: { Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },
         body: "grant_type=client_credentials",
-      }) as { access_token: string; expires_in: number; scope?: string };
+      }, priority, deadline) as { access_token: string; expires_in: number; scope?: string };
       if (!body.access_token || !Number.isFinite(body.expires_in)) throw new Error("Invalid PayPal OAuth response");
       token = { access_token: body.access_token, expiresAt: now() + Math.max(0, body.expires_in - 60) * 1000, scope: body.scope };
       return token;
@@ -93,14 +89,14 @@ export function createPayPalClient(config: Config, deps: Dependencies = {}) {
     const method = options.method ?? "GET";
     const requestId = options.requestId ?? (method === "GET" ? undefined : randomUUID());
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${(await accessToken()).access_token}`,
+      Authorization: `Bearer ${(await accessToken(options.priority,options.deadline)).access_token}`,
       "Content-Type": "application/json", Prefer: "return=representation",
     };
     if (config.bnCode) headers["PayPal-Partner-Attribution-Id"] = config.bnCode;
     if (options.merchantId) headers["PayPal-Auth-Assertion"] = authAssertion(config.clientId, options.merchantId);
     if (requestId) headers["PayPal-Request-Id"] = requestId;
     if (options.mockCode) headers["PayPal-Mock-Response"] = JSON.stringify({ mock_application_codes: options.mockCode });
-    return await send(path, { method, headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) }) as T;
+    return await send(path, { method, headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) }, options.priority, options.deadline) as T;
   }
   return { request, accessToken };
 }

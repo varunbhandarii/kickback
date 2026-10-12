@@ -1,0 +1,1 @@
+ALTER TABLE "rewards" ADD COLUMN "basis_visit_ids" uuid[] DEFAULT '{}' NOT NULL;
