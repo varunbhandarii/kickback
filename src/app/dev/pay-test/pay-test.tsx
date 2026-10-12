@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MerchantName } from "@/lib/paypal/merchants";
 type Summary = { orderId?: string; captureId?: string; captureStatus?: string; accountId?: string; wallet?: string; amount?: { value: string } };
-type Session = { start: (options: { presentationMode: "auto" }, order: Promise<{ orderId: string }>) => Promise<void>; hasReturned: () => boolean; resume: () => Promise<void> };
+type Session = { start: (options: { presentationMode: "auto" }, order: Promise<{ orderId: string }>) => Promise<void> };
+type RedirectSession = Session & { hasReturned: () => boolean; resume: () => Promise<void> };
 type Callbacks = { onApprove: (data: { orderId: string }) => Promise<void>; onCancel: () => void; onError: (error: { message?: string }) => void };
 type SDK = {
   findEligibleMethods: (options: { currencyCode: string; countryCode: string }) => Promise<{ isEligible: (method: string) => boolean }>;
-  createPayPalOneTimePaymentSession: (options: Callbacks) => Session;
+  createPayPalOneTimePaymentSession: (options: Callbacks) => RedirectSession;
   createVenmoOneTimePaymentSession: (options: Callbacks) => Session;
 };
 declare global { interface Window { paypal: { createInstance: (options: { clientId: string; components: string[]; pageType: string; partnerAttributionId?: string }) => Promise<SDK> } } }
@@ -65,8 +66,15 @@ export default function PayTest({ merchant, clientId, bnCode }: { merchant: Merc
       };
       let eligible = 0;
       for (const method of ["paypal", "venmo"] as const) {
-        const session = method === "paypal" ? sdk.createPayPalOneTimePaymentSession(callbacks) : sdk.createVenmoOneTimePaymentSession(callbacks);
-        if (session.hasReturned()) { await session.resume(); }
+        let session: Session;
+        if (method === "paypal") {
+          const paypalSession = sdk.createPayPalOneTimePaymentSession(callbacks);
+          if (paypalSession.hasReturned()) await paypalSession.resume();
+          session = paypalSession;
+        } else {
+          if (!methods.isEligible(method)) continue;
+          session = sdk.createVenmoOneTimePaymentSession(callbacks);
+        }
         if (!methods.isEligible(method)) continue;
         eligible++;
         const button = document.createElement(`${method}-button`);
