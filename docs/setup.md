@@ -69,7 +69,7 @@ npm run webhook:register -- https://your-app.onrender.com
 
 `npm run pause -- rosas` / `npm run resume -- rosas` change the configured database's merchant switch; use `all` globally. Hosted equivalents are bearer-authenticated `POST /api/admin/merchants/rosas/pause` (or `resume`) and `/api/admin/rewards/pause` (or `resume`). An API request already accepted by PayPal can finish after a pause.
 
-`POST /api/jobs/run` triggers recovery; `/api/jobs/purge` purges expired raw data. Sandbox-only `/api/jobs/inspect?merchant=rosas` returns minimized operator status. `/api/jobs/settle` supports refund mock/interrupted-result checks; `/api/jobs/replay-webhooks` replays already processed receipts. Every operator endpoint requires the bearer. There is no unauthenticated simulation API.
+`POST /api/jobs/run` triggers recovery; `/api/jobs/purge` purges expired raw data. Sandbox-only `/api/jobs/inspect?merchant=rosas` returns minimized operator status. `/api/jobs/settle` supports refund mock/interrupted-result checks; adding `killProcess: true` with `interrupt: true` deliberately terminates the sandbox web process after an accepted refund result is discarded. Use it only during a controlled recovery check with no checkout in progress. `/api/jobs/replay-webhooks` replays already processed receipts. Every operator endpoint requires the bearer. There is no unauthenticated simulation API.
 
 ```powershell
 npm test

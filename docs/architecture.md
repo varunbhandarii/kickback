@@ -6,6 +6,8 @@ Next.js serves checkout, terms, signs, status polling, and webhooks. Postgres st
 
 Order creation resolves menu prices on the server and reserves a purchase fingerprint per UUID. Signed order context binds merchant, slug, wallet, amount, order, and UUID. PayPal and Venmo provider account IDs derive the same merchant-specific HMAC key when they identify the same wallet; the provider ID is discarded after derivation.
 
+Capture responses identify the wallet. GET-order recovery preserves an already recorded wallet; for the first capture it uses the authenticated checkout reservation because a later GET can normalize a Venmo-funded order to PayPal. An authoritative capture response can correct earlier metadata without creating another customer or visit.
+
 Transactions acquire merchant and then customer advisory locks, protecting shared budgets and visit merging. Captures within the merge window attach to one visit. Pending captures never earn rewards. Terminal states never regress from a late pending event.
 
 The pure engine supports visit/spend milestones, integer cents, inclusive merchant-local calendar windows, monthly customer caps, and merchant budgets. Consumed milestones remain cycle boundaries after a return. Rewards record contributing visit IDs so returns anywhere in a cycle can claw them back.

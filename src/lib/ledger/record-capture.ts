@@ -24,7 +24,7 @@ export async function recomputeVisit(tx: Tx, visitId: string) {
   const [updated] = await tx.update(visits).set({ status, amountCents }).where(eq(visits.id,visitId)).returning();
   return updated;
 }
-export async function recordCapture({ merchant, order, source, demoVisitAt }: { merchant: Merchant; order: CaptureOrder; source: "PAY_PAGE"|"WEBHOOK"|"REPLAY"|"BACKFILL"; demoVisitAt?: Date }) {
+export async function recordCapture({ merchant, order, source, demoVisitAt, orderRead = false }: { merchant: Merchant; order: CaptureOrder; source: "PAY_PAGE"|"WEBHOOK"|"REPLAY"|"BACKFILL"; demoVisitAt?: Date; orderRead?: boolean }) {
   if (demoVisitAt && (process.env.KICKBACK_ENV !== "sandbox" || process.env.DEMO_MODE !== "true" || source !== "REPLAY")) throw new Error("Historical demo clock is sandbox replay only");
   const unit = order.purchase_units?.[0], capture = unit?.payments?.captures?.[0];
   if (!capture || capture.amount.currency_code !== "USD") throw new Error("USD capture required");
@@ -47,7 +47,10 @@ export async function recordCapture({ merchant, order, source, demoVisitAt }: { 
     const [existing] = await tx.select().from(captures).where(eq(captures.id,capture.id)).for("update");
     if (existing && (existing.orderId !== order.id || existing.merchantId !== merchant.id || (existing.customerKey !== null && key !== null && existing.customerKey !== key) || existing.amountCents !== amountCents)) throw new Error("Capture context mismatch");
     if (!key && existing?.customerKey) { key = existing.customerKey; await lockCustomer(tx,merchant.id,key); }
-    if (!order.payment_source?.paypal && !order.payment_source?.venmo && existing) wallet = existing.wallet;
+    // GET order may normalize a Venmo-funded order to PayPal. Preserve the
+    // recorded source, or use the wallet reserved by our checkout session.
+    if (orderRead) wallet = existing?.customerKey ? existing.wallet : (order.payment_source?.venmo ? "VENMO" : storedOrder.wallet);
+    else if (!order.payment_source?.paypal && !order.payment_source?.venmo && existing) wallet = existing.wallet;
     if (key) {
       await tx.insert(customers).values({ merchantId: merchant.id, key, wallets: [wallet], firstSeen: visitAt, lastSeen: visitAt }).onConflictDoNothing();
       const [customer] = await tx.select().from(customers).where(and(eq(customers.merchantId,merchant.id),eq(customers.key,key)));
@@ -62,7 +65,7 @@ export async function recordCapture({ merchant, order, source, demoVisitAt }: { 
     }
     const status = existing ? nextCaptureStatus(existing.status,capture.status) : capture.status;
     if (!existing) await tx.insert(captures).values({ id: capture.id, merchantId: merchant.id, orderId: order.id, visitId, customerKey: key, wallet, amountCents, feeCents, refundableCents: status === "REFUNDED" ? 0 : amountCents, status, capturedAt });
-    else await tx.update(captures).set({ status,customerKey: key,visitId,wallet: existing.customerKey ? existing.wallet : wallet, feeCents: feeCents || existing.feeCents, updatedAt: new Date() }).where(eq(captures.id,capture.id));
+    else await tx.update(captures).set({ status,customerKey: key,visitId,wallet, feeCents: feeCents || existing.feeCents, updatedAt: new Date() }).where(eq(captures.id,capture.id));
     await (await import("./clawback")).reconcilePendingRefunds(tx,merchant,capture.id);
     const [current] = await tx.select({ status: captures.status }).from(captures).where(eq(captures.id,capture.id));
     if (!key || !visitId) return { recognized: false as const, captureId: capture.id, captureStatus: current.status, wallet };

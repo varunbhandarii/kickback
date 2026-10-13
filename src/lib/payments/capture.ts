@@ -22,18 +22,18 @@ export async function capturePayment(context: ReturnType<typeof verifyOrderToken
     return { captureStatus: known.status,captureId: known.id,recognized: Boolean(customer),progress: customer?.progress as Progress | undefined,reward: publicReward(reward),rewardIds: reward?.state === "SCHEDULED" ? [reward.id] : [] };
   }
   const ctx = await connectionContext(merchant.id);
-  let order: CaptureOrder | undefined;
+  let order: CaptureOrder | undefined, orderRead = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     try { order = await ctx.client.request<CaptureOrder>(`/v2/checkout/orders/${stored.id}/capture`,{ method: "POST",merchantId: ctx.assertionMerchantId,requestId: stored.requestId,priority: "high" }); break; }
     catch (error) {
       if (!(error instanceof PayPalApiError)) throw error;
       const issue = error.details[0]?.issue;
-      if (issue === "ORDER_ALREADY_CAPTURED") { order = await ctx.client.request<CaptureOrder>(`/v2/checkout/orders/${stored.id}`,{ merchantId: ctx.assertionMerchantId,priority: "high" }); break; }
+      if (issue === "ORDER_ALREADY_CAPTURED") { order = await ctx.client.request<CaptureOrder>(`/v2/checkout/orders/${stored.id}`,{ merchantId: ctx.assertionMerchantId,priority: "high" }); orderRead = true; break; }
       if ((issue === "ORDER_COMPLETION_IN_PROGRESS" || error.status === 409) && attempt < 3) { await new Promise((r) => setTimeout(r,2000)); continue; }
       throw error;
     }
   }
   if (!order) throw new Error("Capture unavailable");
-  const result = await recordCapture({ merchant,order,source: "PAY_PAGE" });
+  const result = await recordCapture({ merchant,order,source: "PAY_PAGE",orderRead });
   return { captureStatus: result.captureStatus,captureId: result.captureId,recognized: result.recognized,progress: result.recognized ? result.progress : undefined,reward: publicReward(result.recognized ? result.reward : undefined),rewardIds: result.recognized ? result.rewardIds : [] };
 }

@@ -41,7 +41,7 @@ async function recordUnknown(orderId: string, resource: Resource, eventType: str
   if (!merchant) return;
   const ctx = await connectionContext(merchant.id);
   const order = fetchedOrder ?? await ctx.client.request<CaptureOrder>(`/v2/checkout/orders/${orderId}`,{ merchantId: ctx.assertionMerchantId, priority: "high",deadline });
-  const result = await recordCapture({ merchant,order,source: "WEBHOOK" });
+  const result = await recordCapture({ merchant,order,source: "WEBHOOK",orderRead: true });
   if (/^PAYMENT\.CAPTURE\.(COMPLETED|PENDING|DECLINED|DENIED)$/.test(eventType)) await markCaptureStatus(merchant,result.captureId,eventType.split(".").at(-1)!);
   return result;
 }
