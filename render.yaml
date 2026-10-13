@@ -34,6 +34,20 @@ services:
         value: partner
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: DEMO_USER_PASSWORD
+        sync: false
+      - key: PAYPAL_LOGIN_ENABLED
+        value: "false"
+      - key: TENANT_PURGE_HOURS
+        value: "48"
+      - key: BACKFILL_DAYS
+        value: "90"
+      - key: RECONCILE_INTERVAL_HOURS
+        value: "6"
       - key: ANTHROPIC_MODEL
         value: claude-opus-5-5
       - key: KICKBACK_MASTER_KEY

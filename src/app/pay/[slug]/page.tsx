@@ -2,10 +2,38 @@ import { notFound } from "next/navigation";
 import { loadMerchant, connectionContext } from "@/lib/merchants";
 import { getEnv } from "@/lib/env";
 import PayClient from "./pay-client";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { connections } from "@/db/schema";
 export const dynamic = "force-dynamic";
-export default async function PayPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params, merchant = await loadMerchant(slug);
+export default async function PayPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params,
+    merchant = await loadMerchant(slug);
   if (!merchant) notFound();
-  const ctx = await connectionContext(merchant.id), env = getEnv();
-  return <PayClient slug={slug} name={merchant.displayName} menu={merchant.menu} spec={merchant.spec} paused={merchant.status !== "ACTIVE"} clientId={ctx.clientId} bnCode={env.PAYPAL_BN_CODE as string | undefined} sandbox={env.KICKBACK_ENV === "sandbox"} />;
+  const env = getEnv(),
+    [connection] = await getDb()
+      .select({ status: connections.status })
+      .from(connections)
+      .where(eq(connections.merchantId, merchant.id));
+  const paused =
+    merchant.status !== "ACTIVE" ||
+    Boolean(merchant.purgeAfter) ||
+    connection?.status !== "CONNECTED";
+  const ctx = paused ? undefined : await connectionContext(merchant.id);
+  return (
+    <PayClient
+      slug={slug}
+      name={merchant.displayName}
+      menu={merchant.menu}
+      spec={merchant.spec}
+      paused={paused}
+      clientId={ctx?.clientId ?? ""}
+      bnCode={env.PAYPAL_BN_CODE as string | undefined}
+      sandbox={env.KICKBACK_ENV === "sandbox"}
+    />
+  );
 }

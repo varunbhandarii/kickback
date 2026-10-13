@@ -10,6 +10,14 @@ Open [Rosa's Cafe](https://kickback-web.onrender.com/pay/rosas), choose a menu i
 
 Read the [program terms](https://kickback-web.onrender.com/pay/rosas/terms). The [printable sign](https://kickback-web.onrender.com/pay/rosas/sign) and [QR image](https://kickback-web.onrender.com/api/pay/rosas/qr.png) point to checkout.
 
+## Connect your business
+
+Create a [merchant account](https://kickback-web.onrender.com/sign-up), add your business and time zone, then connect PayPal through merchant consent or your own REST app credentials. Kickback verifies the connection with PayPal before enabling payments. With Transaction Search enabled, it reads up to 90 days of sales and carries existing visit progress into your program without issuing rewards for milestones completed in history.
+
+Activate a visit or spending preset, edit the menu, and download a pay sign or QR. The merchant area includes customer codes, rewards, limits, staff exclusion, and pause/resume controls. Disconnect stops checkout and future rewards immediately and schedules customer/payment data and connection credentials for deletion within 48 hours. Printed pay links lock after the first download.
+
+Email/password sign-in works independently of email delivery. Password reset, verification, single-use sign-in links, and co-owner invitations require a configured email sender. Optional PayPal sign-in requires its separate callback configuration. See [setup](docs/setup.md).
+
 ## Run locally
 
 Use Node 24.21.0 (or >=22.12 and <25), npm, and Docker Desktop.

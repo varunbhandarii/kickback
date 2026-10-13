@@ -12,7 +12,23 @@ npm run seed:demo
 npm run dev
 ```
 
-The initializer preserves `.env` and generates encryption/job keys without printing them. Docker Postgres listens at `127.0.0.1:55432`. Set `APP_URL=http://localhost:3000` locally; the pay API checks the exact browser origin. Never commit secrets or rotate the master key without migrating identities and encrypted connections.
+The initializer preserves `.env` and generates encryption, job, authentication, and demo-password keys without printing them. Docker Postgres listens at `127.0.0.1:55432`. Set `APP_URL=http://localhost:3000` locally; pay and account APIs check the browser origin. Never commit secrets or rotate the master key without migrating identities and encrypted connections. Migrations commit individually under a database lock so PostgreSQL enum upgrades work both from an empty database and an existing installation.
+
+## Merchant accounts and connection
+
+Open `/sign-up` and complete Business → Connect → History → Program → Menu. The wizard saves your current step. New businesses start with checkout disabled. Partner consent redirects to PayPal; return parameters are hints, and integration status must confirm receivable payments, email, and checkout/refund scopes. Pending connections can be rechecked or completed by an onboarding webhook.
+
+For your own REST app, enable checkout/refunds and Transaction Search. Paste the app credentials into the connection form; its secret is encrypted with a business-specific authentication tag. When Search is available, Kickback identifies the app's Merchant ID from its report. Otherwise paste the Merchant ID from that Business account's settings. A mismatched reported/pasted ID is rejected. The app's HTTPS webhook is registered or reused automatically; ten URLs is the provider limit.
+
+Click **Read my sales history**. The job reads overlapping windows, resumes after interruptions, and shows recognized customers and unrecognized payments. Guest payments do not create customer profiles. Activate a preset, set limits, save the menu, and download the sign. Changing a locked slug is refused so existing signs remain valid.
+
+The demo login is `demo@kickback.local`, with `DEMO_USER_PASSWORD` from your private environment. Seeding creates it once, links the three demo businesses, and preserves their existing settings and connections. Newly onboarded businesses use database connection records; merchant environment variables are seed/CLI configuration only.
+
+## Email and optional sign-in
+
+Configure `RESEND_API_KEY` and `EMAIL_FROM` with a [verified domain](https://resend.com/docs/dashboard/domains/introduction). Keep the key restricted to sending from that domain. Password reset, email verification, single-use sign-in links, and co-owner invitations become available when both are present. Invitations grant full owner access only to a signed-in user who has verified the invited inbox; links expire after seven days. Operational emails go only to merchant owners. Give the cron these two variables as well to enable scheduled owner notices.
+
+To enable PayPal sign-in, configure Log in with PayPal on the platform app with `${APP_URL}/api/auth/callback/paypal` as its exact return URL, name/email profile permissions, and the public privacy/terms URLs. Set `PAYPAL_LOGIN_ENABLED=true` after saving that configuration. This merchant login is separate from payment approval and partner consent. Email/password sign-in remains available when this option is disabled.
 
 ## Environment
 
@@ -39,6 +55,12 @@ The initializer preserves `.env` and generates encryption/job keys without print
 | `PAYPAL_DEMO_VAULT_ID`, `MERCHANT_{ROSAS,SALON,BAKERY}_VAULT_ID` | Private saved sandbox wallet tokens |
 | `REMOTE_JOBS_BEARER` | Hosted key for remote replay when different from local |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Optional AI configuration |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Authentication encryption/signing key and public origin; URL defaults to APP_URL |
+| `DEMO_USER_PASSWORD` | Required sandbox seed password; never printed or rotated by reseeding |
+| `PAYPAL_LOGIN_ENABLED` | Exposes PayPal merchant sign-in after provider configuration |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Optional verified sender for merchant authentication/operational email |
+| `TENANT_PURGE_HOURS` | Default 48; a shorter value is sandbox-only for isolated deletion checks |
+| `RECONCILE_INTERVAL_HOURS`, `BACKFILL_DAYS` | Default 6-hour reconciliation and 90-day history |
 | `NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY` | Applicable Studio deployment license |
 
 ## PayPal setup

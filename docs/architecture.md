@@ -1,5 +1,21 @@
 # Components and data handling
 
+## Merchant accounts and onboarding
+
+Better Auth uses database sessions and scrypt passwords. The proxy checks cookie presence for `/m/*`; the data-access layer independently checks the session, its absolute 30-day age, and owner membership on every page and mutation. Per-IP and per-email sign-in limits return generic errors. Optional email verification, hashed single-use sign-in tokens, password resets, and inbox-bound co-owner invitations use the merchant sender. OAuth access/refresh tokens are encrypted.
+
+Business creation writes an onboarding merchant, owner membership, and draft program. Partner callbacks map by a server-stored tracking ID and re-query PayPal's integration API; hints cannot mark a seller connected. Webhooks trigger the same truth lookup. BYO validates OAuth scopes, optionally verifies the merchant account through reporting, registers/reuses an app-specific webhook, and stores the secret with AES-GCM bound to the tenant ID. Connection attempts use a nonce so disconnect cancels in-progress setup.
+
+## Sales history and reconciliation
+
+The history worker reads at most 90 days in 31-day windows with one-day overlap, 500 rows per page, and a 20-page window limit. A durable cursor, heartbeat, and lease allow the 45-second worker to resume safely. Successful USD sale/refund/chargeback codes are classified in memory. Account IDs become tenant HMACs immediately; payer contacts, descriptions, and raw Search responses are neither logged nor stored. Guest sales keep only derived count/deduplication markers and create no customer, order, or capture row.
+
+Recognized new sales create synthetic orders, captures, and merged visits. Transaction/event markers deduplicate overlaps independently of capture identity; known captures and their recorded wallets are preserved. Unordered refunds and risk events wait in normalized receipts until their sale is available. Existing rewarded cycles are protected when bridging visit groups. Completion calculates progress once per customer and refreshes aggregate business statistics. Milestones before program activation or within an initial history import are consumed without payments; that import boundary remains durable after retries and completion.
+
+Every six hours, eligible active businesses reconcile the last 48 hours using the same importer. External sales can earn rewards after activation. Earned refunds rematch by refund/custom IDs without a second balance debit; foreign refunds retain the existing clawback rules. Missing report matches raise an attention marker without changing a sent reward's state. Reporting lag may be three hours.
+
+Disconnect and consent revocation pause checkout/rewards, cancel queued rewards and imports, invalidate connection attempts, and schedule tenant deletion. Purge removes ledger and connection credentials in dependency order, clears business statistics, and scrubs audit identifiers while retaining business configuration and owner membership for reconnection. Order fingerprints expire after seven days; audit records after 90 days. Account deletion requires recent authentication, confirms a password when present, revokes sessions/memberships, and disconnects businesses losing their last owner; other co-owners retain access.
+
 Next.js serves checkout, terms, signs, status polling, and webhooks. Postgres stores merchants, encrypted BYO connections, versioned programs, pseudonymous customers, orders, captures, visits, rewards, offsets, refund receipts, dispute cases, and an audit log.
 
 ## Recognition and rules
