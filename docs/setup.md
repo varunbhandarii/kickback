@@ -42,7 +42,7 @@ The initializer preserves `.env` and generates encryption/job keys without print
 
 ## PayPal setup
 
-1. Create a sandbox Platform app in [Apps & Credentials](https://developer.paypal.com/dashboard/applications/sandbox). Copy credentials privately. “Save payment methods” is the Vault feature. Enable Transaction Search and relevant merchant features.
+1. Create a sandbox Platform app in [Apps & Credentials](https://developer.paypal.com/dashboard/applications/sandbox). Copy credentials privately. “Save payment methods” is the Vault feature. Enable Transaction Search and Custom disputes / Disputes API. Connecting a merchant requests `READ_SELLER_DISPUTE` and `UPDATE_SELLER_DISPUTE` alongside payment/refund access; an older grant must be approved again to add those permissions. Subscribing to dispute events alone does not grant merchant access.
 2. Create US Business merchants and US Personal buyers. Sign into checkout with the sandbox buyer credentials.
 3. Populate merchant account IDs. In partner mode, approve Partner Referrals consent as each merchant and verify granted features. A seed row alone does not grant consent.
 4. Migrate and seed, then open `/pay/rosas`. `/dev/pay-test` remains a separate gated diagnostic page.
