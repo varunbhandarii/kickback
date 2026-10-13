@@ -22,7 +22,7 @@ export async function seedDemo() {
     await getDb().transaction(async (tx) => {
       const [merchant] = await tx.insert(merchants).values({ slug: demo.slug, displayName: demo.name, menu: demo.menu as MenuItem[] }).onConflictDoUpdate({ target: merchants.slug, set: { displayName: demo.name, menu: demo.menu as MenuItem[] } }).returning();
       const [old] = await tx.select().from(connections).where(eq(connections.merchantId,merchant.id));
-      const value = { merchantId: merchant.id, merchantIdInPayPal: id, mode, clientId: mode === "BYO" ? clientId : null, clientSecretEnc: mode === "BYO" ? encryptSecret(secret!) : null, grantedFeatures: ["PAYMENT","REFUND","ADVANCED_TRANSACTIONS_SEARCH","ACCESS_MERCHANT_INFORMATION"], consentStatus: old?.consentStatus ?? "UNKNOWN", webhookId: mode === "PARTNER" ? env.PAYPAL_WEBHOOK_ID as string | undefined : process.env[`MERCHANT_${demo.prefix}_WEBHOOK_ID`], updatedAt: new Date() };
+      const value = { merchantId: merchant.id, merchantIdInPayPal: id, mode, clientId: mode === "BYO" ? clientId : null, clientSecretEnc: mode === "BYO" ? encryptSecret(secret!) : null, grantedFeatures: old?.grantedFeatures ?? ["PAYMENT","REFUND","ADVANCED_TRANSACTIONS_SEARCH","ACCESS_MERCHANT_INFORMATION"], consentStatus: old?.consentStatus ?? "UNKNOWN", webhookId: process.env[`MERCHANT_${demo.prefix}_WEBHOOK_ID`] || old?.webhookId || (mode === "PARTNER" ? env.PAYPAL_WEBHOOK_ID as string | undefined : undefined), updatedAt: new Date() };
       await tx.insert(connections).values(value).onConflictDoUpdate({ target: connections.merchantId, set: value });
       await tx.insert(programs).values({ merchantId: merchant.id, version: 1, status: "ACTIVE", spec, provenance: { source: "demo-seed" } }).onConflictDoNothing();
     });

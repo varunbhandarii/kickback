@@ -1,0 +1,10 @@
+import { afterAll,beforeAll,beforeEach,expect,it,vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { connections,merchants,programs } from "@/db/schema";
+import { seedDemo } from "@/lib/db/seed-demo";
+import { setupDb,teardownDb,resetDb } from "./helpers/db";
+beforeAll(setupDb,30000);afterAll(teardownDb);
+beforeEach(async () => { await resetDb();for (const prefix of ["ROSAS","SALON","BAKERY"]) { vi.stubEnv(`MERCHANT_${prefix}_ID`,"MERCHANT12345");vi.stubEnv(`MERCHANT_${prefix}_CONNECTION_MODE`,"partner");vi.stubEnv(`MERCHANT_${prefix}_WEBHOOK_ID`,""); }vi.stubEnv("PAYPAL_WEBHOOK_ID","PLATFORM_WEBHOOK"); });
+it("preserves merchant webhook registrations and verified grants across repeated seed runs",async () => { await seedDemo();const [merchant] = await getDb().select().from(merchants).where(eq(merchants.slug,"rosas"));await getDb().update(connections).set({ webhookId: "MERCHANT_WEBHOOK",grantedFeatures: ["PAYMENT","REFUND","READ_SELLER_DISPUTE","UPDATE_SELLER_DISPUTE"],consentStatus: "GRANTED" }).where(eq(connections.merchantId,merchant.id));await seedDemo();expect(await getDb().select().from(merchants)).toHaveLength(3);expect(await getDb().select().from(programs)).toHaveLength(3);expect(await getDb().select().from(connections).where(eq(connections.merchantId,merchant.id))).toMatchObject([{ webhookId: "MERCHANT_WEBHOOK",consentStatus: "GRANTED",grantedFeatures: ["PAYMENT","REFUND","READ_SELLER_DISPUTE","UPDATE_SELLER_DISPUTE"] }]); });
+it("accepts an explicit merchant registration override in partner mode",async () => { vi.stubEnv("MERCHANT_ROSAS_WEBHOOK_ID","MERCHANT_WEBHOOK");await seedDemo();const [merchant] = await getDb().select().from(merchants).where(eq(merchants.slug,"rosas"));expect(await getDb().select().from(connections).where(eq(connections.merchantId,merchant.id))).toMatchObject([{ mode: "PARTNER",webhookId: "MERCHANT_WEBHOOK",clientSecretEnc: null }]); });

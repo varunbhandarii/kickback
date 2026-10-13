@@ -53,6 +53,7 @@ npm run webhook:register -- https://your-app.onrender.com
 ```
 
 6. Set the returned `PAYPAL_WEBHOOK_ID`. Local/hosted listeners need separate registrations. Real deliveries must log `verification_status: SUCCESS`. Enable Negative Testing on the relevant sandbox business account before mock checks.
+   If a merchant-owned app delivers events separately, run `npm run webhook:register -- https://your-app.onrender.com --merchant-owned rosas` with that app's credentials available locally. Set its returned registration ID as `MERCHANT_ROSAS_WEBHOOK_ID` locally and in the hosted environment, then rerun the seed. The optional merchant IDs work in partner mode too; reseeding preserves existing registration IDs and verified grant metadata. The listener verifies those IDs locally with PayPal's certificate; partner deployments need not upload merchant app secrets.
 7. For replay, approve saving a buyer's wallet and convert its setup token to a payment token. Store it privately. If PayPal rejects a platform token for a connected merchant, obtain a merchant-specific token.
 
 ## Render deployment
