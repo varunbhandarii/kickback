@@ -30,6 +30,8 @@ Refunds match their stored ID first, then a reward custom ID. Unidentified event
 
 OAuth tokens are cached. High/normal/low priority lanes pace every PayPal request: burst 10, refill 40/minute **per process**, not across the fleet. Pay routes use in-memory rate limits, origin checks, and HMAC tokens. Operator APIs require the job bearer; replay and fault checks also require sandbox demo mode.
 
+The webhook listener accepts the platform registration and configured merchant registration IDs from `connections.webhook_id`. It verifies signatures against those server-side IDs; callers cannot supply a trusted registration. Platform deliveries keep the local-verification fast path. Merchant-owned deliveries can be verified locally with PayPal's certificate without uploading merchant app credentials.
+
 ## Retention and operations
 
 Raw payloads expire after 47 hours and are purged every five minutes; rows older than 48 hours trigger an alert. Outages can delay physical deletion. Minimal receipts and the pseudonymous ledger remain; data minimization does not establish a retention or marketing-use policy exemption.

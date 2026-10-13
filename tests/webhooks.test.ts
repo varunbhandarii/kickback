@@ -7,6 +7,10 @@ function deps(status = "SUCCESS") {
   return { webhookId: "webhook", allowUnverified: false, verify: vi.fn(async (body: unknown) => { void body; return { verification_status: status }; }), persist: vi.fn(async (event: WebhookEvent) => { void event; return true; }), log: vi.fn() };
 }
 describe("webhook receiver", () => {
+  it("verifies a configured merchant webhook locally without merchant credentials",async () => { const d = deps("FAILURE"), localVerify = vi.fn(async (_raw: string,_headers: Headers,id: string) => id === "merchant-webhook"), webhookIds = vi.fn(async () => ["merchant-webhook"]);expect((await handleWebhook(request(),{ ...d,localVerify,webhookIds })).status).toBe(200);expect(d.persist).toHaveBeenCalledOnce();expect(d.verify).not.toHaveBeenCalled();expect(d.log.mock.calls[0][0]).toMatchObject({ verification_status: "SUCCESS" }); });
+  it("keeps platform deliveries on the fast path",async () => { const d = deps(), webhookIds = vi.fn(async () => ["merchant-webhook"]);expect((await handleWebhook(request(),{ ...d,localVerify: async () => true,webhookIds })).status).toBe(200);expect(webhookIds).not.toHaveBeenCalled();expect(d.verify).not.toHaveBeenCalled(); });
+  it("rejects signatures that match none of the configured registrations",async () => { const d = deps("FAILURE");expect((await handleWebhook(request(),{ ...d,localVerify: async () => false,webhookIds: async () => ["merchant-webhook"] })).status).toBe(400);expect(d.verify).toHaveBeenCalledTimes(2);expect(d.persist).not.toHaveBeenCalled(); });
+  it("retries delivery when configured registration lookup is unavailable",async () => { const d = deps();expect((await handleWebhook(request(),{ ...d,localVerify: async () => false,webhookIds: async () => { throw new Error("Database unavailable"); } })).status).toBe(503);expect(d.persist).not.toHaveBeenCalled(); });
   it("verifies the complete original JSON and logs only identifiers", async () => {
     const d = deps();
     expect((await handleWebhook(request(), d)).status).toBe(200);

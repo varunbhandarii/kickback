@@ -3,6 +3,8 @@ import { getEnv } from "../env";
 import { paypalFetch } from "./client";
 import { getDb } from "@/db";
 import { rawEvents, webhookEvents } from "@/db/schema";
+import { connections } from "@/db/schema";
+import { isNotNull } from "drizzle-orm";
 import { verifyLocal } from "./local-verification";
 
 const eventSchema = z.object({
@@ -12,6 +14,7 @@ const eventSchema = z.object({
 export type WebhookEvent = z.infer<typeof eventSchema>;
 type Dependencies = {
   webhookId?: string;
+  webhookIds?: () => Promise<string[]>;
   allowUnverified: boolean;
   verify: (body: unknown) => Promise<{ verification_status: string }>;
   persist: (event: WebhookEvent) => Promise<boolean>;
@@ -45,10 +48,18 @@ export async function handleWebhook(request: Request, deps: Dependencies) {
     transmission_time: request.headers.get("paypal-transmission-time"),
   };
   let verified = false;
-  if (deps.webhookId && Object.values(headers).every(Boolean)) {
+  if ((deps.webhookId || deps.webhookIds) && Object.values(headers).every(Boolean)) {
     try {
-      if (deps.localVerify) { try { verified = await deps.localVerify(raw,request.headers,deps.webhookId); } catch { /* PayPal postback is the fallback for certificate outages. */ } }
-      if (!verified) { const result = await deps.verify({ ...headers, webhook_id: deps.webhookId, webhook_event: parsed }); verified = result.verification_status === "SUCCESS"; }
+      const ids = deps.webhookId ? [deps.webhookId] : [];
+      if (deps.localVerify && deps.webhookId) { try { verified = await deps.localVerify(raw,request.headers,deps.webhookId); } catch { /* Postback is the fallback for certificate outages. */ } }
+      if (!verified) {
+        if (deps.webhookIds) ids.push(...await deps.webhookIds());
+        const configured = [...new Set(ids.filter(Boolean))].slice(0,21);
+        if (deps.localVerify) for (const id of configured) { if (id === deps.webhookId) continue;try { verified = await deps.localVerify(raw,request.headers,id); } catch { /* Retry through postback below. */ }if (verified) break; }
+        let unavailable = false;
+        if (!verified) for (const id of configured) { try { verified = (await deps.verify({ ...headers,webhook_id: id,webhook_event: parsed })).verification_status === "SUCCESS"; } catch { unavailable = true; }if (verified) break; }
+        if (!verified && unavailable) return Response.json({ error: "Verification unavailable" },{ status: 503 });
+      }
     } catch {
       return Response.json({ error: "Verification unavailable" }, { status: 503 });
     }
@@ -68,6 +79,7 @@ export function webhookDependencies(): Dependencies {
   const env = getEnv();
   return {
     webhookId: env.PAYPAL_WEBHOOK_ID as string | undefined,
+    webhookIds: async () => (await getDb().select({ id: connections.webhookId }).from(connections).where(isNotNull(connections.webhookId)).limit(20)).map((row) => row.id!),
     localVerify: verifyLocal,
     allowUnverified: env.KICKBACK_ENV === "sandbox" && env.KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS,
     verify: (body) => paypalFetch("/v1/notifications/verify-webhook-signature", { method: "POST", body, priority: "high" }),
