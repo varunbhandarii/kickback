@@ -26,7 +26,8 @@ The initializer preserves `.env` and generates encryption/job keys without print
 | `MERCHANT_{ROSAS,SALON,BAKERY}_ID` | Sandbox merchant IDs for seed |
 | `PAYPAL_CONNECTION_MODE` | `partner` or `byo` |
 | `MERCHANT_{ROSAS,SALON,BAKERY}_CONNECTION_MODE` | Per-merchant mode override |
-| `MERCHANT_{ROSAS,SALON,BAKERY}_CLIENT_ID`, `..._CLIENT_SECRET`, `..._WEBHOOK_ID` | BYO only; secret encrypted in DB |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_CLIENT_ID`, `..._CLIENT_SECRET` | BYO credentials; secret encrypted in DB |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_WEBHOOK_ID` | Optional merchant-owned listener registration, including partner mode |
 | `KICKBACK_MASTER_KEY` | 32 random bytes in standard Base64; identity, encryption, tokens |
 | `JOBS_BEARER` | At least 32 characters for operator APIs |
 | `PG_POOL_MAX` | Web 5; cron 2 |
@@ -54,7 +55,8 @@ npm run webhook:register -- https://your-app.onrender.com
 
 6. Set the returned `PAYPAL_WEBHOOK_ID`. Local/hosted listeners need separate registrations. Real deliveries must log `verification_status: SUCCESS`. Enable Negative Testing on the relevant sandbox business account before mock checks.
    If a merchant-owned app delivers events separately, run `npm run webhook:register -- https://your-app.onrender.com --merchant-owned rosas` with that app's credentials available locally. Set its returned registration ID as `MERCHANT_ROSAS_WEBHOOK_ID` locally and in the hosted environment, then rerun the seed. The optional merchant IDs work in partner mode too; reseeding preserves existing registration IDs and verified grant metadata. The listener verifies those IDs locally with PayPal's certificate; partner deployments need not upload merchant app secrets.
-7. For replay, approve saving a buyer's wallet and convert its setup token to a payment token. Store it privately. If PayPal rejects a platform token for a connected merchant, obtain a merchant-specific token.
+7. For replay, sign into the Developer dashboard with your regular developer account, open the REST app associated with the sandbox merchant, and enable **Features → Payment capabilities → Save payment methods → Save Changes**. Sandbox buyer/business passwords are used at `sandbox.paypal.com`, not for the Developer dashboard.
+8. Obtain a merchant-specific saved wallet using the [Payment Method Tokens API](https://developer.paypal.com/api/payment-tokens/save-without-purchase/paypal/). In partner mode, create the `usage_type: MERCHANT` setup token with the platform credentials and that merchant's Auth-Assertion. The sandbox buyer approves the returned link; convert the approved setup token with the same merchant assertion. Store the payment token privately as `MERCHANT_ROSAS_VAULT_ID` (or the matching merchant variable). A token saved for the platform merchant is not interchangeable with a connected merchant's token. A feature checkbox or consent grant alone does not prove that the setup API is enabled; verify the actual setup response.
 
 ## Render deployment
 
