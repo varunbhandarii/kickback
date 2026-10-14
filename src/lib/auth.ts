@@ -8,6 +8,7 @@ import * as schema from "@/db/schema";
 import { getEnv } from "./env";
 import { clearEmailAttempts, emailAttemptAllowed } from "./auth-policy";
 import { emailConfigured, sendMerchantEmail } from "./email";
+import { normalizePayPalProfile } from "./paypal/identity-profile";
 export function createMerchantAuth(database = getDb(), env = getEnv()) {
   if (!env.BETTER_AUTH_SECRET)
     throw new Error("Set BETTER_AUTH_SECRET using npm run env:init");
@@ -65,6 +66,21 @@ export function createMerchantAuth(database = getDb(), env = getEnv()) {
             clientId: env.PAYPAL_CLIENT_ID,
             clientSecret: env.PAYPAL_CLIENT_SECRET,
             environment: env.KICKBACK_ENV,
+            mapProfileToUser: (profile) => {
+              const user = normalizePayPalProfile(profile);
+              if (!user.email) {
+                const legacy = (profile as unknown as { emails?: unknown })
+                  .emails;
+                console.error(
+                  JSON.stringify({
+                    action: "paypal_identity_email_missing",
+                    standardEmailPresent: Boolean(profile.email),
+                    legacyEmailCount: Array.isArray(legacy) ? legacy.length : 0,
+                  }),
+                );
+              }
+              return user;
+            },
             // This provider version supplies no default authorization scopes.
             authorizationEndpoint:
               env.KICKBACK_ENV === "sandbox"

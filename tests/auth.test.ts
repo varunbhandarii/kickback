@@ -13,7 +13,7 @@ import { getDb } from "@/db";
 import { getEnv } from "@/lib/env";
 import { resetEmailBucketsForTests } from "@/lib/auth-policy";
 import { enforceSessionAge } from "@/lib/session-policy";
-import { session as sessions, user } from "@/db/schema";
+import { account, session as sessions, user } from "@/db/schema";
 import { eq } from "drizzle-orm";
 let auth: ReturnType<(typeof import("@/lib/auth"))["createMerchantAuth"]>;
 function request(
@@ -58,6 +58,84 @@ describe("merchant authentication", () => {
       "https://app.test/api/auth/callback/paypal",
     );
     expect(url.searchParams.get("state")).toBeTruthy();
+  });
+  it("completes a legacy-email PayPal callback with a session and encrypted provider tokens", async () => {
+    const { createMerchantAuth } = await import("@/lib/auth"),
+      paypal = createMerchantAuth(getDb(), {
+        ...getEnv(),
+        PAYPAL_LOGIN_ENABLED: true,
+      }),
+      email = `${randomUUID()}@example.com`;
+    const start = await paypal.handler(
+      request("/sign-in/social", { provider: "paypal", callbackURL: "/m" }),
+    );
+    const state = new URL((await start.json()).url).searchParams.get("state")!,
+      stateCookie = start.headers
+        .getSetCookie()
+        .map((value) => value.split(";")[0])
+        .join("; ");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url === "https://api-m.sandbox.paypal.com/v1/oauth2/token")
+          return Response.json({
+            access_token: "TEST_PROVIDER_ACCESS",
+            refresh_token: "TEST_PROVIDER_REFRESH",
+            token_type: "Bearer",
+            expires_in: 3600,
+          });
+        if (
+          url.startsWith(
+            "https://api-m.sandbox.paypal.com/v1/identity/oauth2/userinfo",
+          )
+        )
+          return Response.json({
+            user_id: `TEST_PROVIDER_${email}`,
+            name: "Test merchant",
+            emails: [{ value: email, primary: true }],
+            verified_account: true,
+          });
+        throw new Error("Unexpected OAuth test request");
+      }),
+    );
+    try {
+      const callback = await paypal.handler(
+        request(
+          `/callback/paypal?code=test-provider-code&state=${encodeURIComponent(state)}`,
+          undefined,
+          stateCookie,
+        ),
+      );
+      expect(callback.status).toBe(302);
+      const returnUrl = new URL(
+        callback.headers.get("location")!,
+        "https://app.test",
+      );
+      expect(returnUrl.origin).toBe("https://app.test");
+      expect(returnUrl.pathname).toBe("/m");
+      const cookie = callback.headers
+          .getSetCookie()
+          .map((value) => value.split(";")[0])
+          .join("; "),
+        signedIn = await paypal.handler(
+          request("/get-session", undefined, cookie),
+        ),
+        session = await signedIn.json();
+      expect(session.user.email).toBe(email);
+      expect(session.user.emailVerified).toBe(false);
+      const [stored] = await getDb()
+        .select()
+        .from(account)
+        .where(eq(account.userId, session.user.id));
+      expect(stored.providerId).toBe("paypal");
+      expect(stored.accessToken).toBeTruthy();
+      expect(stored.accessToken).not.toBe("TEST_PROVIDER_ACCESS");
+      expect(stored.refreshToken).toBeTruthy();
+      expect(stored.refreshToken).not.toBe("TEST_PROVIDER_REFRESH");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
   it("creates a merchant account and DB session, signs out, and signs in again", async () => {
     const email = `${randomUUID()}@example.com`,

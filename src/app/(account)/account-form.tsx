@@ -106,6 +106,7 @@ export default function AccountForm({
             void authClient.signIn.social({
               provider: "paypal",
               callbackURL: "/m",
+              errorCallbackURL: "/sign-in",
             });
           }}
         >
