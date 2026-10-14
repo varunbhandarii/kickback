@@ -88,6 +88,9 @@ describe("scheduled intelligence", () => {
     await getDb().update(visits).set({ source: "FIXTURE" });
     expect(await weeklySuggestions()).toBe(0);
     await getDb().update(visits).set({ source: "PAY_PAGE" });
+    await getDb().update(visits).set({ amountCents: 100 });
+    expect(await weeklySuggestions()).toBe(0);
+    await getDb().update(visits).set({ amountCents: 550 });
     mocks.enabled.mockReturnValue(false);
     expect(await weeklySuggestions()).toBe(0);
     mocks.enabled.mockReturnValue(true);
@@ -139,13 +142,11 @@ describe("scheduled intelligence", () => {
   it("expires draft references safely while retaining current usage and unread notices", async () => {
     const merchant = await ready(),
       [draft] = await getDb().select().from(designRuns);
-    await getDb()
-      .insert(suggestions)
-      .values({
-        merchantId: merchant.id,
-        designRunId: draft.id,
-        candidateId: "A",
-      });
+    await getDb().insert(suggestions).values({
+      merchantId: merchant.id,
+      designRunId: draft.id,
+      candidateId: "A",
+    });
     await getDb()
       .update(designRuns)
       .set({ expiresAt: new Date(Date.now() - 1000) })

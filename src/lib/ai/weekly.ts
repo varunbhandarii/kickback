@@ -31,18 +31,6 @@ export async function weeklySuggestions(deadline = Date.now() + 45000) {
       (last.status === "PENDING" || +last.createdAt > Date.now() - 7 * 86400000)
     )
       continue;
-    const [count] = await getDb()
-      .select({ n: sql<number>`count(*)::int` })
-      .from(visits)
-      .where(
-        and(
-          eq(visits.merchantId, merchant.id),
-          eq(visits.status, "COMPLETED"),
-          ne(visits.source, "FIXTURE"),
-          gte(visits.startedAt, new Date(Date.now() - 30 * 86400000)),
-        ),
-      );
-    if (count.n < 20) continue;
     const [active] = await getDb()
       .select()
       .from(programs)
@@ -53,6 +41,22 @@ export async function weeklySuggestions(deadline = Date.now() + 45000) {
         ),
       );
     if (!active) continue;
+    const [count] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(visits)
+      .where(
+        and(
+          eq(visits.merchantId, merchant.id),
+          eq(visits.status, "COMPLETED"),
+          ne(visits.source, "FIXTURE"),
+          gte(visits.startedAt, new Date(Date.now() - 30 * 86400000)),
+          gte(
+            visits.amountCents,
+            (active.spec as { minTicketCents?: number }).minTicketCents ?? 100,
+          ),
+        ),
+      );
+    if (count.n < 20) continue;
     const leaseKey = "ai-weekly:" + merchant.id;
     const claimed = await getDb().transaction(async (tx) => {
       await lockMerchant(tx, merchant.id);
