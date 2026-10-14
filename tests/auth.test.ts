@@ -41,6 +41,24 @@ describe("merchant authentication", () => {
   });
   afterAll(teardownDb);
   beforeEach(resetEmailBucketsForTests);
+  it("starts sandbox PayPal login with identity scopes and a protected callback state", async () => {
+    const { createMerchantAuth } = await import("@/lib/auth");
+    const paypal = createMerchantAuth(getDb(), {
+      ...getEnv(),
+      PAYPAL_LOGIN_ENABLED: true,
+    });
+    const response = await paypal.handler(
+      request("/sign-in/social", { provider: "paypal", callbackURL: "/m" }),
+    );
+    expect(response.status).toBe(200);
+    const url = new URL((await response.json()).url);
+    expect(url.origin).toBe("https://www.sandbox.paypal.com");
+    expect(url.searchParams.get("scope")).toBe("openid profile email");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://app.test/api/auth/callback/paypal",
+    );
+    expect(url.searchParams.get("state")).toBeTruthy();
+  });
   it("creates a merchant account and DB session, signs out, and signs in again", async () => {
     const email = `${randomUUID()}@example.com`,
       password = "A-long-test-password";

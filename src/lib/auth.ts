@@ -65,6 +65,11 @@ export function createMerchantAuth(database = getDb(), env = getEnv()) {
             clientId: env.PAYPAL_CLIENT_ID,
             clientSecret: env.PAYPAL_CLIENT_SECRET,
             environment: env.KICKBACK_ENV,
+            // This provider version supplies no default authorization scopes.
+            authorizationEndpoint:
+              env.KICKBACK_ENV === "sandbox"
+                ? "https://www.sandbox.paypal.com/signin/authorize?scope=openid%20profile%20email"
+                : "https://www.paypal.com/signin/authorize?scope=openid%20profile%20email",
           },
         }
       : {},
