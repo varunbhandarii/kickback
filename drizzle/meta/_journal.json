@@ -64,6 +64,13 @@
       "when": 1791928491059,
       "tag": "0008_tenant_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791953212289,
+      "tag": "0009_program_intelligence",
+      "breakpoints": true
     }
   ]
 }

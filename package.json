@@ -5,6 +5,7 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "seed:demo": "tsx scripts/seed-demo.ts",
+    "seed:history": "tsx scripts/seed-history.ts",
     "replay": "tsx scripts/replay.ts",
     "pause": "tsx scripts/pause.ts pause",
     "resume": "tsx scripts/pause.ts resume",

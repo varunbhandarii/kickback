@@ -8,6 +8,7 @@ import { BusinessSettings, DisconnectForm } from "./settings-forms";
 import { emailConfigured } from "@/lib/email";
 import AccountSecurity from "./account-security";
 import DeleteAccountForm from "./delete-account-form";
+import { saveVoice } from "../onboarding/program/ai-actions";
 export default async function SettingsPage() {
   const { user, merchant } = await requireMerchant(),
     [connection] = await getDb()
@@ -27,6 +28,24 @@ export default async function SettingsPage() {
   return (
     <>
       <h1>Settings</h1>
+      <form action={saveVoice} className="merchant-card">
+        <input type="hidden" name="merchantId" value={merchant.id} />
+        <h2>Your voice</h2>
+        <label>
+          Voice hints
+          <textarea
+            name="voiceHints"
+            maxLength={200}
+            defaultValue={merchant.voiceHints}
+            placeholder="Friendly and short; we say see you tomorrow."
+          />
+        </label>
+        <button>Save voice</button>
+        <p>
+          Hints guide proposed copy. Every note still passes the same
+          validators.
+        </p>
+      </form>
       <BusinessSettings
         initial={{
           id: merchant.id,

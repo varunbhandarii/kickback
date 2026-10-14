@@ -10,6 +10,8 @@ import {
   offsets,
   rewards,
   visits,
+  guardFlags,
+  orders,
 } from "@/db/schema";
 import { audit } from "../audit";
 import {
@@ -20,6 +22,8 @@ import {
 } from "../engine/evaluate";
 import { rewardNote } from "../engine/program";
 import type { Merchant } from "../merchants";
+import { guardFeatures } from "../guard/features";
+import { scoreGuard } from "../guard/score";
 const budgetStates = [
   "SCHEDULED",
   "SENDING",
@@ -184,7 +188,16 @@ export async function enqueue(
       .limit(1);
     let applied = 0;
     const blocked =
-      "blocked" in item || customer?.status === "EXCLUDED" || disconnected;
+      "blocked" in item ||
+      customer?.status === "EXCLUDED" ||
+      disconnected ||
+      history.find((v) => v.id === item.visitId)?.source === "FIXTURE";
+    const features = blocked
+      ? undefined
+      : await guardFeatures(tx, merchant, key, item.visitId, now);
+    const guard = features
+      ? scoreGuard(features, merchant.spec.settlement)
+      : { score: 0, tier: merchant.spec.settlement, reasons: [] as string[] };
     if (!blocked) {
       const debts = await tx
         .select()
@@ -213,13 +226,15 @@ export async function enqueue(
       ? "CANCELLED"
       : applied === item.amountCents
         ? "OFFSET"
-        : customer?.status !== "OK" || merchant.spec.settlement === "REVIEW"
+        : customer?.status !== "OK" || guard.tier === "REVIEW"
           ? "HELD"
           : "SCHEDULED";
+    const rewardId = randomUUID();
     const [row] = await tx
       .insert(rewards)
       .values({
-        id: randomUUID(),
+        id: rewardId,
+        guardScore: guard.score,
         merchantId: merchant.id,
         customerKey: key,
         programId: merchant.program.id,
@@ -229,9 +244,9 @@ export async function enqueue(
         basisVisitIds: item.basisVisitIds,
         offsetAppliedCents: applied,
         state,
-        tier: merchant.spec.settlement,
+        tier: guard.tier,
         requestId: randomUUID(),
-        note: rewardNote(merchant.spec, merchant.displayName),
+        note: rewardNote(merchant.spec, merchant.displayName, rewardId),
         reason: disconnected
           ? "DISCONNECTED"
           : customer?.status === "EXCLUDED"
@@ -244,14 +259,24 @@ export async function enqueue(
                   : "REVIEW"
                 : item.reason,
         settleAt: new Date(
-          now.getTime() +
-            (merchant.spec.settlement === "DELAYED" ? 86400000 : 0),
+          now.getTime() + (guard.tier === "DELAYED" ? 86400000 : 0),
         ),
         createdAt: now,
       })
       .onConflictDoNothing()
       .returning();
     if (row) {
+      if (features)
+        await tx.insert(guardFlags).values({
+          merchantId: merchant.id,
+          rewardId: row.id,
+          score: guard.score,
+          tier: guard.tier,
+          reasons: guard.reasons,
+          features,
+          decision:
+            state === "HELD" && guard.tier === "REVIEW" ? "PENDING" : "AUTO",
+        });
       inserted.push(row);
       await audit(tx, merchant.id, "reward.enqueued", row.id, {
         state: row.state,
@@ -280,6 +305,19 @@ export async function awakenDeferred(
   key: string,
   captureId: string,
 ) {
+  const [target] = await tx
+    .select({ id: captures.id, status: orders.status, source: visits.source })
+    .from(captures)
+    .innerJoin(orders, eq(orders.id, captures.orderId))
+    .leftJoin(visits, eq(visits.id, captures.visitId))
+    .where(eq(captures.id, captureId));
+  if (
+    !target ||
+    captureId.startsWith("fx:") ||
+    target.status === "FIXTURE" ||
+    target.source === "FIXTURE"
+  )
+    return;
   const due = await tx
     .select()
     .from(rewards)

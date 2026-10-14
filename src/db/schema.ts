@@ -50,6 +50,7 @@ export const visitSource = pgEnum("visit_source", [
   "WEBHOOK",
   "REPLAY",
   "BACKFILL",
+  "FIXTURE",
 ]);
 export const rewardState = pgEnum("reward_state", [
   "EARNED",
@@ -95,6 +96,7 @@ export const merchants = pgTable("merchants", {
     .notNull()
     .default({}),
   statsUpdatedAt: at("stats_updated_at"),
+  voiceHints: text("voice_hints").notNull().default(""),
 });
 export const connections = pgTable("connections", {
   merchantId: uuid("merchant_id")
@@ -312,6 +314,7 @@ export const rewards = pgTable(
   "rewards",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    guardScore: integer("guard_score").notNull().default(0),
     merchantId: uuid("merchant_id")
       .notNull()
       .references(() => merchants.id),
@@ -444,3 +447,99 @@ export const settings = pgTable("settings", {
   value: jsonb("value").notNull(),
   updatedAt: at("updated_at").notNull().defaultNow(),
 });
+
+export const aiCalls = pgTable(
+  "ai_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    feature: text("feature").notNull(),
+    model: text("model").notNull(),
+    operationId: uuid("operation_id"),
+    status: text("status").notNull().default("STARTED"),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    requestId: text("request_id"),
+    createdAt: at("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("ai_calls_quota_idx").on(t.merchantId, t.createdAt)],
+);
+export const designRuns = pgTable("design_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  merchantId: uuid("merchant_id")
+    .notNull()
+    .references(() => merchants.id),
+  createdBy: text("created_by").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  result: jsonb("result_json").notNull(),
+  createdAt: at("created_at").notNull().defaultNow(),
+  expiresAt: at("expires_at").notNull(),
+});
+export const guardFlags = pgTable(
+  "guard_flags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    rewardId: uuid("reward_id")
+      .notNull()
+      .unique()
+      .references(() => rewards.id),
+    score: integer("score").notNull(),
+    tier: rewardTier("tier").notNull(),
+    reasons: jsonb("reasons_json").$type<string[]>().notNull(),
+    features: jsonb("features_json").notNull(),
+    decision: text("decision").notNull().default("AUTO"),
+    decidedBy: text("decided_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: at("decided_at"),
+    explanation: jsonb("explanation_json"),
+    createdAt: at("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("guard_flags_queue_idx").on(t.merchantId, t.decision)],
+);
+export const notices = pgTable(
+  "notices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    kind: text("kind").notNull(),
+    severity: text("severity").notNull(),
+    body: text("body").notNull(),
+    createdAt: at("created_at").notNull().defaultNow(),
+    readAt: at("read_at"),
+  },
+  (t) => [
+    uniqueIndex("notices_open_idx")
+      .on(t.merchantId, t.kind)
+      .where(sql`${t.readAt} is null`),
+  ],
+);
+export const suggestions = pgTable(
+  "suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    designRunId: uuid("design_run_id").references(() => designRuns.id),
+    candidateId: text("candidate_id"),
+    status: text("status").notNull().default("PENDING"),
+    createdAt: at("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("suggestions_pending_idx")
+      .on(t.merchantId)
+      .where(sql`${t.status} = 'PENDING'`),
+  ],
+);

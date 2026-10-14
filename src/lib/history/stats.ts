@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import type { Tx } from "@/db";
 import { captures, historyEvents, merchants, visits } from "@/db/schema";
 import type { Merchant } from "../merchants";
@@ -62,6 +62,7 @@ export async function computeHistoryStats(
       and(
         eq(visits.merchantId, merchant.id),
         eq(visits.status, "COMPLETED"),
+        ne(visits.source, "FIXTURE"),
         gte(visits.startedAt, recent),
         lte(visits.startedAt, now),
         gte(visits.amountCents, merchant.spec.minTicketCents),
@@ -138,9 +139,31 @@ export async function computeHistoryStats(
         .reduce((s, n) => s + n, 0) / Math.max(1, rows.length),
     computedAt: now.toISOString(),
   };
+  const demo = await tx
+    .select({ id: visits.id, source: visits.source })
+    .from(visits)
+    .where(
+      and(
+        eq(visits.merchantId, merchant.id),
+        eq(visits.status, "COMPLETED"),
+        gte(visits.startedAt, from),
+        inArray(visits.source, ["FIXTURE", "REPLAY"]),
+      ),
+    );
+  const augmented = {
+    ...stats,
+    includesDemoHistory: demo.length > 0,
+    demoVisits: demo.length,
+    demoShare:
+      demo.length /
+      Math.max(
+        1,
+        rows.length + demo.filter((v) => v.source === "FIXTURE").length,
+      ),
+  };
   await tx
     .update(merchants)
-    .set({ stats, statsUpdatedAt: now })
+    .set({ stats: augmented, statsUpdatedAt: now })
     .where(eq(merchants.id, merchant.id));
-  return stats;
+  return augmented;
 }

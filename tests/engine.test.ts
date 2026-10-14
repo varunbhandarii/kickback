@@ -1,32 +1,215 @@
 import { describe, expect, it } from "vitest";
-import { evaluate, simulate, localDay, type VisitView, type Budget } from "@/lib/engine/evaluate";
-import { defaultProgram, loadProgram, rewardNote, type ProgramSpec } from "@/lib/engine/program";
-const now = new Date("2026-10-12T12:00:00Z"), tz = "America/New_York", zero: Budget = { dailyUsedCents: 0,monthlyUsedCents: 0,customerMonthlyUsedCents: 0 };
-const history = (n: number,amount = 550): VisitView[] => Array.from({ length: n },(_,i) => ({ id: `v${i}`,startedAt: new Date(now.getTime()-(n-i)*86400000),amountCents: amount,status: "COMPLETED" }));
-const run = (visits: VisitView[],spec: ProgramSpec = { ...defaultProgram },budget = zero) => evaluate(spec,visits,[],budget,now,tz);
-describe("reward rules",() => {
-  it("shows empty progress",() => expect(run([])).toMatchObject({ intents: [],progress: { current: 0,target: 5 } }));
-  it("shows four visits",() => expect(run(history(4)).progress.current).toBe(4));
-  it("earns at five",() => expect(run(history(5)).intents).toMatchObject([{ visitId: "v4",amountCents: 200,reason: "VISIT_MILESTONE",basisVisitIds: ["v0","v1","v2","v3","v4"] }]));
-  it("resets after each cycle",() => expect(run(history(11))).toMatchObject({ intents: [{ visitId: "v4" },{ visitId: "v9" }],progress: { current: 1 } }));
-  it.each(["PENDING","VOID"] as const)("excludes %s",(status) => expect(run(history(5).map((v,i) => i === 0 ? { ...v,status } : v)).intents).toHaveLength(0));
-  it("excludes below minimum",() => expect(run(history(5,299)).progress.current).toBe(0));
-  it("includes exact minimum",() => expect(run(history(5,300)).intents).toHaveLength(1));
-  it("excludes future visits",() => expect(run([{ ...history(1)[0],startedAt: new Date(now.getTime()+1) }]).progress.current).toBe(0));
-  it("does not mutate its inputs",() => { const rows = history(8).reverse(), copy = structuredClone(rows); run(rows); expect(rows).toEqual(copy); });
-  it("suppresses every consumed milestone, including cancelled",() => { const visits = history(5); expect(evaluate({ ...defaultProgram },visits,[{ visitId: "v4",state: "CANCELLED",amountCents: 200,createdAt: now }],zero,now,tz).intents).toHaveLength(0); });
-  it("expires old progress",() => expect(run(history(1).map((v) => ({ ...v,startedAt: new Date(now.getTime()-61*86400000) }))).progress.current).toBe(0));
-  it("starts a new cycle after a gap",() => { const rows = history(5); rows[0].startedAt = new Date(now.getTime()-90*86400000); expect(run(rows).progress.current).toBe(4); });
-  it("includes the last local calendar day across DST",() => { const dates = ["2026-03-07T15:00:00Z","2026-03-09T14:00:00Z"].map((date,i) => ({ ...history(1)[0],id: `dst${i}`,startedAt: new Date(date) })); expect(evaluate({ ...defaultProgram,n: 2,windowDays: 2 },dates,[],zero,new Date("2026-03-09T15:00:00Z"),tz).intents).toHaveLength(1); });
-  it("uses merchant dates rather than UTC dates",() => expect(localDay(new Date("2026-10-12T02:00:00Z"),tz)).toBe("2026-10-11"));
-  it.each([ ["MONTHLY_CAP",{ ...zero,customerMonthlyUsedCents: 900 }], ["DAILY_BUDGET",{ ...zero,dailyUsedCents: 4900 }], ["MONTHLY_BUDGET",{ ...zero,monthlyUsedCents: 14900 }] ] as const)("consumes milestone at %s",(block,budget) => expect(run(history(6),{ ...defaultProgram },budget)).toMatchObject({ intents: [],consumed: [{ visitId: "v4",reason: block }],progress: { current: 1,blocked: block } }));
-  it("allows exactly the remaining cap",() => expect(run(history(5),{ ...defaultProgram },{ ...zero,customerMonthlyUsedCents: 800 }).intents).toHaveLength(1));
-  it("reserves budgets for multiple new intents",() => expect(run(history(10),{ ...defaultProgram,dailyBudgetCents: 200 }).intents).toHaveLength(1));
-  it("does not carry extra spend",() => { const { n: _n,...base } = defaultProgram; void _n; expect(run(history(3,2500),{ ...base,type: "SPEND_MILESTONE",spendCents: 4000 })).toMatchObject({ intents: [{ visitId: "v1" }],progress: { current: 2500,target: 4000 } }); });
-  it("counts a merged visit only once",() => expect(run(history(1,1100)).progress.current).toBe(1));
-  it.each([{ n: 1 },{ rewardCents: 2501 },{ rewardCents: 2.5 },{ mergeWindowMin: 5 }])("rejects invalid spec %j",(change) => expect(() => loadProgram({ ...defaultProgram,...change })).toThrow());
-  it("renders a safe note",() => expect(rewardNote({ ...defaultProgram },"Rosa's Cafe")).toBe("Thanks for 5 visits, this one's on Rosa's Cafe"));
-  it("rejects unsafe notes",() => expect(() => rewardNote({ ...defaultProgram,noteTemplate: "https://example.com" },"Rosa")).toThrow());
-  it("is deterministic across 300 seeded visits",() => { let seed = 12; const rows = history(300).map((v) => { seed = (seed*1664525+1013904223) >>> 0; return { ...v,amountCents: 100+seed%1500,status: seed%7 === 0 ? "VOID" as const : "COMPLETED" as const }; }); expect(run(rows)).toEqual(run(structuredClone(rows))); const intents = run(rows).intents; expect(new Set(intents.map((v) => v.visitId)).size).toBe(intents.length); });
-  it("simulates per-customer histories with shared budgets",() => { const rows = [...history(5).map((v) => ({ ...v,customerKey: "a" })),...history(5).map((v) => ({ ...v,id: `b${v.id}`,customerKey: "b" }))]; expect(simulate({ ...defaultProgram },rows)).toEqual({ costCents: 400,earners: 2,rewards: 2,refundCountRatio: .2 }); });
+import {
+  evaluate,
+  simulate,
+  localDay,
+  type VisitView,
+  type Budget,
+} from "@/lib/engine/evaluate";
+import {
+  defaultProgram,
+  loadProgram,
+  rewardNote,
+  type ProgramSpec,
+} from "@/lib/engine/program";
+const now = new Date("2026-10-12T12:00:00Z"),
+  tz = "America/New_York",
+  zero: Budget = {
+    dailyUsedCents: 0,
+    monthlyUsedCents: 0,
+    customerMonthlyUsedCents: 0,
+  };
+const history = (n: number, amount = 550): VisitView[] =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `v${i}`,
+    startedAt: new Date(now.getTime() - (n - i) * 86400000),
+    amountCents: amount,
+    status: "COMPLETED",
+  }));
+const run = (
+  visits: VisitView[],
+  spec: ProgramSpec = { ...defaultProgram },
+  budget = zero,
+) => evaluate(spec, visits, [], budget, now, tz);
+describe("reward rules", () => {
+  it("shows empty progress", () =>
+    expect(run([])).toMatchObject({
+      intents: [],
+      progress: { current: 0, target: 5 },
+    }));
+  it("shows four visits", () =>
+    expect(run(history(4)).progress.current).toBe(4));
+  it("earns at five", () =>
+    expect(run(history(5)).intents).toMatchObject([
+      {
+        visitId: "v4",
+        amountCents: 200,
+        reason: "VISIT_MILESTONE",
+        basisVisitIds: ["v0", "v1", "v2", "v3", "v4"],
+      },
+    ]));
+  it("resets after each cycle", () =>
+    expect(run(history(11))).toMatchObject({
+      intents: [{ visitId: "v4" }, { visitId: "v9" }],
+      progress: { current: 1 },
+    }));
+  it.each(["PENDING", "VOID"] as const)("excludes %s", (status) =>
+    expect(
+      run(history(5).map((v, i) => (i === 0 ? { ...v, status } : v))).intents,
+    ).toHaveLength(0),
+  );
+  it("excludes below minimum", () =>
+    expect(run(history(5, 299)).progress.current).toBe(0));
+  it("includes exact minimum", () =>
+    expect(run(history(5, 300)).intents).toHaveLength(1));
+  it("excludes future visits", () =>
+    expect(
+      run([{ ...history(1)[0], startedAt: new Date(now.getTime() + 1) }])
+        .progress.current,
+    ).toBe(0));
+  it("does not mutate its inputs", () => {
+    const rows = history(8).reverse(),
+      copy = structuredClone(rows);
+    run(rows);
+    expect(rows).toEqual(copy);
+  });
+  it("suppresses every consumed milestone, including cancelled", () => {
+    const visits = history(5);
+    expect(
+      evaluate(
+        { ...defaultProgram },
+        visits,
+        [
+          {
+            visitId: "v4",
+            state: "CANCELLED",
+            amountCents: 200,
+            createdAt: now,
+          },
+        ],
+        zero,
+        now,
+        tz,
+      ).intents,
+    ).toHaveLength(0);
+  });
+  it("expires old progress", () =>
+    expect(
+      run(
+        history(1).map((v) => ({
+          ...v,
+          startedAt: new Date(now.getTime() - 61 * 86400000),
+        })),
+      ).progress.current,
+    ).toBe(0));
+  it("starts a new cycle after a gap", () => {
+    const rows = history(5);
+    rows[0].startedAt = new Date(now.getTime() - 90 * 86400000);
+    expect(run(rows).progress.current).toBe(4);
+  });
+  it("includes the last local calendar day across DST", () => {
+    const dates = ["2026-03-07T15:00:00Z", "2026-03-09T14:00:00Z"].map(
+      (date, i) => ({
+        ...history(1)[0],
+        id: `dst${i}`,
+        startedAt: new Date(date),
+      }),
+    );
+    expect(
+      evaluate(
+        { ...defaultProgram, n: 2, windowDays: 2 },
+        dates,
+        [],
+        zero,
+        new Date("2026-03-09T15:00:00Z"),
+        tz,
+      ).intents,
+    ).toHaveLength(1);
+  });
+  it("uses merchant dates rather than UTC dates", () =>
+    expect(localDay(new Date("2026-10-12T02:00:00Z"), tz)).toBe("2026-10-11"));
+  it.each([
+    ["MONTHLY_CAP", { ...zero, customerMonthlyUsedCents: 900 }],
+    ["DAILY_BUDGET", { ...zero, dailyUsedCents: 4900 }],
+    ["MONTHLY_BUDGET", { ...zero, monthlyUsedCents: 14900 }],
+  ] as const)("consumes milestone at %s", (block, budget) =>
+    expect(run(history(6), { ...defaultProgram }, budget)).toMatchObject({
+      intents: [],
+      consumed: [{ visitId: "v4", reason: block }],
+      progress: { current: 1, blocked: block },
+    }),
+  );
+  it("allows exactly the remaining cap", () =>
+    expect(
+      run(
+        history(5),
+        { ...defaultProgram },
+        { ...zero, customerMonthlyUsedCents: 800 },
+      ).intents,
+    ).toHaveLength(1));
+  it("reserves budgets for multiple new intents", () =>
+    expect(
+      run(history(10), { ...defaultProgram, dailyBudgetCents: 200 }).intents,
+    ).toHaveLength(1));
+  it("does not carry extra spend", () => {
+    const { n: _n, ...base } = defaultProgram;
+    void _n;
+    expect(
+      run(history(3, 2500), {
+        ...base,
+        type: "SPEND_MILESTONE",
+        spendCents: 4000,
+      }),
+    ).toMatchObject({
+      intents: [{ visitId: "v1" }],
+      progress: { current: 2500, target: 4000 },
+    });
+  });
+  it("counts a merged visit only once", () =>
+    expect(run(history(1, 1100)).progress.current).toBe(1));
+  it.each([
+    { n: 1 },
+    { rewardCents: 2501 },
+    { rewardCents: 2.5 },
+    { mergeWindowMin: 5 },
+  ])("rejects invalid spec %j", (change) =>
+    expect(() => loadProgram({ ...defaultProgram, ...change })).toThrow(),
+  );
+  it("renders a safe note", () =>
+    expect(rewardNote({ ...defaultProgram }, "Rosa's Cafe")).toBe(
+      "Thanks for 5 visits, this one's on Rosa's Cafe",
+    ));
+  it("rejects unsafe notes", () =>
+    expect(() =>
+      rewardNote(
+        { ...defaultProgram, noteTemplate: "https://example.com" },
+        "Rosa",
+      ),
+    ).toThrow());
+  it("is deterministic across 300 seeded visits", () => {
+    let seed = 12;
+    const rows = history(300).map((v) => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return {
+        ...v,
+        amountCents: 100 + (seed % 1500),
+        status: seed % 7 === 0 ? ("VOID" as const) : ("COMPLETED" as const),
+      };
+    });
+    expect(run(rows)).toEqual(run(structuredClone(rows)));
+    const intents = run(rows).intents;
+    expect(new Set(intents.map((v) => v.visitId)).size).toBe(intents.length);
+  });
+  it("simulates per-customer histories with shared budgets", () => {
+    const rows = [
+      ...history(5).map((v) => ({ ...v, customerKey: "a" })),
+      ...history(5).map((v) => ({ ...v, id: `b${v.id}`, customerKey: "b" })),
+    ];
+    expect(simulate({ ...defaultProgram }, rows)).toMatchObject({
+      costCents: 400,
+      earners: 2,
+      rewards: 2,
+      refundCountRatio: 0.2,
+    });
+  });
 });

@@ -76,9 +76,15 @@ npm run webhook:register -- https://your-app.onrender.com
 
 Tests cover calendar boundaries, identity, merging, budgets, offsets, executor errors, webhook replay, signatures, API tokens, and pacing. The concurrency check uses real sandbox Postgres and removes only its own generated rows.
 
+## AI used and why
+
+The Program Designer translates a merchant goal and aggregate history into three proposals. A deterministic backtest supplies the figures; explanations must pass a number-faithfulness check. Guard routes rewards by code-defined risk signals and gives owners a review queue. Scribe proposes validated notes, a terms introduction and a sign pitch. Owner approval is required before a proposal changes the active rule or public copy. No AI feature can move money.
+
+Demo businesses can include labeled synthetic history for the design step. These visits are excluded from live eligibility and their captures can never be refunded. Without an API key, presets, template notes and deterministic Guard still work. See [AI behavior and limits](docs/ai.md).
+
 ## Integrations and privacy
 
-PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10, and a 40-per-minute refill per process. AG Studio provides a separate synthetic dashboard; Anthropic provides the Program Designer schema and SDK foundation. Render hosts Next.js, Postgres, and the recovery worker.
+PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10, and a 40-per-minute refill per process. AG Studio provides a separate synthetic dashboard; Anthropic powers validated program proposals, metric-grounded explanations and thank-you copy. Render hosts Next.js, Postgres, and the recovery worker.
 
 The loyalty ledger stores merchant-specific HMAC keys and payment identifiers, never provider account IDs, names, email addresses, phone numbers, or Venmo usernames. This pseudonymous ledger remains linkable; it is not a claim of anonymity or a provider-policy exemption. Raw webhook payloads expire after 47 hours and are purged every five minutes, with alerts for retention over 48 hours. Production retention, consent, provider approvals, and deployment licenses must be established before live use. See [architecture](docs/architecture.md) and [privacy](docs/privacy.md).
 

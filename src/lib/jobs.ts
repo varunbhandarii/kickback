@@ -7,6 +7,8 @@ import { reprocessWebhooks } from "./webhooks/dispatch";
 import { purgeOperationalMetadata, purgeTenants } from "./db/purge-tenants";
 import { sweepHistory } from "./history/worker";
 import { sendOperationalNotices } from "./email";
+import { refreshNotices } from "./guard/notices";
+import { weeklySuggestions } from "./ai/weekly";
 export async function runJobs() {
   const started = Date.now(),
     deadline = started + 45000;
@@ -23,6 +25,10 @@ export async function runJobs() {
   const deleted = await purgeRawEvents();
   const notices =
     Date.now() < deadline - 2000 ? await sendOperationalNotices(deadline) : 0;
+  const guardNotices =
+    Date.now() < deadline - 5000 ? await refreshNotices(deadline) : 0;
+  const ideas =
+    Date.now() < deadline - 10000 ? await weeklySuggestions(deadline) : 0;
   const [overdue] = await getDb()
     .select({ count: sql<number>`count(*)::int` })
     .from(rawEvents)
@@ -41,6 +47,8 @@ export async function runJobs() {
     tenantsPurged,
     metadataPurged,
     notices,
+    guardNotices,
+    ideas,
     deleted,
     retentionOverdue: overdue.count,
     elapsedMs: Date.now() - started,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   captures,
@@ -10,10 +10,19 @@ import {
   rewards,
   settings,
   visits,
+  notices,
+  suggestions,
+  designRuns,
 } from "@/db/schema";
 import { requireMerchant } from "@/lib/dal";
 import { loadMerchant } from "@/lib/merchants";
-import { selectBusiness, toggleRewards } from "./actions";
+import {
+  selectBusiness,
+  toggleRewards,
+  dismissIdea,
+  dismissNotice,
+} from "./actions";
+import type { DesignResult } from "@/lib/ai/designer/pipeline";
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 export default async function Dashboard() {
   const { user, merchant } = await requireMerchant(),
@@ -119,6 +128,36 @@ export default async function Dashboard() {
     )
     .groupBy(visits.customerKey)
     .having(sql`count(*) >= 4`);
+  const [fixtureCount] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(visits)
+    .where(
+      and(eq(visits.merchantId, merchant.id), eq(visits.source, "FIXTURE")),
+    );
+  const alerts = await db
+    .select()
+    .from(notices)
+    .where(and(eq(notices.merchantId, merchant.id), isNull(notices.readAt)))
+    .orderBy(desc(notices.createdAt))
+    .limit(20);
+  const [idea] = await db
+    .select({ suggestion: suggestions, run: designRuns })
+    .from(suggestions)
+    .innerJoin(designRuns, eq(designRuns.id, suggestions.designRunId))
+    .where(
+      and(
+        eq(suggestions.merchantId, merchant.id),
+        eq(suggestions.status, "PENDING"),
+      ),
+    );
+  const provenance = loaded?.program.provenance as
+    | {
+        source?: string;
+        approvedAt?: string;
+        selectedMetrics?: { monthlyCostCents: number; gmvRatio: number };
+        includesDemoHistory?: boolean;
+      }
+    | undefined;
   return (
     <>
       <div className="merchant-title">
@@ -146,6 +185,13 @@ export default async function Dashboard() {
         </p>
       )}
       <div className="merchant-grid">
+        {!!fixtureCount.n && (
+          <p className="merchant-banner">
+            Includes demo history (synthetic): {fixtureCount.n} visits. These
+            visits inform backtests and never earn refunds. Visit summaries
+            below include them.
+          </p>
+        )}
         <section className="merchant-card">
           <h2>PayPal connection</h2>
           <p>
@@ -204,6 +250,27 @@ export default async function Dashboard() {
             </button>
           </form>
           <Link href="/m/onboarding/program">Edit program</Link>
+          {provenance?.source === "designer" && (
+            <p>
+              Designed from your history on{" "}
+              {provenance.approvedAt
+                ? new Date(provenance.approvedAt).toLocaleDateString("en-US", {
+                    timeZone: merchant.tz,
+                  })
+                : "activation"}
+              .
+              {provenance.selectedMetrics && (
+                <>
+                  {" "}
+                  Backtested monthly cost{" "}
+                  {money(provenance.selectedMetrics.monthlyCostCents)} · reward
+                  / revenue{" "}
+                  {(provenance.selectedMetrics.gmvRatio * 100).toFixed(1)}%.
+                </>
+              )}
+              {provenance.includesDemoHistory && " Includes demo history."}
+            </p>
+          )}
         </section>
       </div>
       <section className="merchant-card">
@@ -239,10 +306,21 @@ export default async function Dashboard() {
       </section>
       <section className="merchant-card">
         <h2>Needs attention</h2>
+        {alerts.map((notice) => (
+          <div key={notice.id}>
+            <p>{notice.body}</p>
+            <form action={dismissNotice}>
+              <input type="hidden" name="merchantId" value={merchant.id} />
+              <input type="hidden" name="id" value={notice.id} />
+              <button className="secondary">Dismiss notice</button>
+            </form>
+          </div>
+        ))}
         {!needs.length &&
         !pending[0].count &&
         !frozen[0].count &&
-        !unreconciled.length ? (
+        !unreconciled.length &&
+        !alerts.length ? (
           <p>Nothing needs attention.</p>
         ) : (
           <ul>
@@ -275,11 +353,33 @@ export default async function Dashboard() {
         )}
       </section>
       <p className="merchant-links">
+        {idea && idea.run.expiresAt > new Date() && (
+          <span>
+            <strong>Idea for next month: </strong>
+            {
+              (idea.run.result as DesignResult).cards.find(
+                (c) => c.params.id === idea.suggestion.candidateId,
+              )?.explanation.pitch
+            }{" "}
+            <Link
+              href={"/m/onboarding/program?suggestion=" + idea.suggestion.id}
+            >
+              Review and approve
+            </Link>
+          </span>
+        )}
         <Link href="/m/onboarding/menu">Sign & QR</Link>
         <Link href={`/pay/${merchant.slug}`}>Pay page</Link>
         <Link href={`/pay/${merchant.slug}/terms`}>Program terms</Link>
         <Link href="/privacy">Privacy</Link>
       </p>
+      {idea && (
+        <form action={dismissIdea}>
+          <input type="hidden" name="merchantId" value={merchant.id} />
+          <input type="hidden" name="id" value={idea.suggestion.id} />
+          <button className="secondary">Dismiss idea</button>
+        </form>
+      )}
     </>
   );
 }

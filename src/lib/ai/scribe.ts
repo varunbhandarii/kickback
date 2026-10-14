@@ -1,0 +1,195 @@
+import { generateNotes } from "./scribe-notes";
+import { z } from "zod";
+import {
+  aiEnabled,
+  dataBlock,
+  structured,
+  type StructuredCaller,
+} from "./client";
+import type { ProgramSpec } from "../engine/program";
+export const milestoneText = (s: ProgramSpec) =>
+  s.type === "VISIT_MILESTONE"
+    ? s.n + " visits"
+    : "$" + (s.spendCents / 100).toFixed(2) + " spent";
+const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const denied =
+  /\b(discounts?|offers?|sales?|coupons?|codes?|limited|refer\w*|net)\b|%\s*off|effectively\s*\$|guarantee|promise|will arrive|instantly/i;
+export function copyValid(
+  text: string,
+  max: number,
+  merchant: string,
+  spec: ProgramSpec,
+  options: { milestone?: boolean; notes?: boolean; items?: string[] } = {},
+) {
+  if (
+    !text ||
+    text.length > max ||
+    /[\r\n]|https?:|www\.|\b\w+\.(com|net|org)\b/i.test(text)
+  )
+    return false;
+  const body = text.replaceAll(merchant, "");
+  if (denied.test(body)) return false;
+  const free = body.match(/\bfree\b[^.,;!]*/gi) ?? [];
+  if (
+    free.some(
+      (piece) =>
+        !(options.items ?? []).some((item) =>
+          new RegExp("^free\\s+" + escape(item) + "\\b", "i").test(piece),
+        ),
+    )
+  )
+    return false;
+  const emojis = [...body.matchAll(/\p{Extended_Pictographic}/gu)];
+  if (emojis.length > 1) return false;
+  const ascii = body.replace(/\p{Extended_Pictographic}/gu, "");
+  if (/[^\x20-\x7e]/.test(ascii)) return false;
+  if (
+    options.notes &&
+    (!text.includes(merchant) || !text.includes(milestoneText(spec)))
+  )
+    return false;
+  if (options.milestone && !text.includes(milestoneText(spec))) return false;
+  const allowed = new Set<number>([
+    spec.rewardCents / 100,
+    spec.windowDays,
+    spec.minTicketCents / 100,
+    spec.perCustomerMonthlyCapCents / 100,
+    spec.dailyBudgetCents / 100,
+    spec.monthlyBudgetCents / 100,
+    spec.mergeWindowMin,
+    ...(spec.type === "VISIT_MILESTONE"
+      ? [spec.n, spec.endowedProgress ?? 0]
+      : [spec.spendCents / 100]),
+  ]);
+  if (
+    (body.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).some(
+      (n) => !allowed.has(Number(n.replaceAll(",", ""))),
+    )
+  )
+    return false;
+  if (options.notes) {
+    const allowedMoney = [
+      spec.rewardCents / 100,
+      ...(spec.type === "SPEND_MILESTONE" ? [spec.spendCents / 100] : []),
+    ];
+    if (
+      (body.match(/\$\d[\d,]*(?:\.\d+)?/g) ?? []).some(
+        (n) => !allowedMoney.includes(Number(n.replace(/[$,]/g, ""))),
+      )
+    )
+      return false;
+  }
+  return true;
+}
+export function templateNotes(name: string, spec: ProgramSpec) {
+  const milestone = milestoneText(spec);
+  return [
+    `Thanks for ${milestone}, from ${name}.`,
+    `${name}: thanks for ${milestone}.`,
+    `${milestone} at ${name}. Thank you!`,
+    `${name} appreciates your ${milestone}.`,
+    `A thank-you from ${name} for ${milestone}.`,
+    `Cheers from ${name} for ${milestone}.`,
+  ].filter((note) => copyValid(note, 120, name, spec, { notes: true }));
+}
+export function templateCopy(name: string, spec: ProgramSpec) {
+  const rule = milestoneText(spec),
+    reward = "$" + (spec.rewardCents / 100).toFixed(2);
+  const pitch = `Regulars get ${reward} back after ${rule}.`;
+  return {
+    termsIntro: "A small thank-you for coming back.",
+    workedExamples: [
+      `After ${rule} within ${spec.windowDays} days, an eligible purchase can receive a ${reward} partial refund, subject to limits.`,
+      `The next ${rule} starts a new cycle under the same limits. Returned or disputed purchases can forfeit eligibility.`,
+    ],
+    signPitch: pitch,
+  };
+}
+
+const Copy = z.strictObject({
+  termsIntro: z.string(),
+  workedExamples: z.array(z.string()).length(2),
+  signPitch: z.string(),
+});
+export async function generateScribe(
+  merchantId: string,
+  name: string,
+  voiceHints: string,
+  spec: ProgramSpec,
+  items: string[] = [],
+  caller: StructuredCaller = structured,
+) {
+  const notes = await generateNotes(
+      merchantId,
+      name,
+      voiceHints,
+      spec,
+      items,
+      caller,
+    ),
+    calls = [...notes.aiCallIds];
+  let copy = templateCopy(name, spec),
+    copyFallback = true;
+  if (aiEnabled())
+    for (let attempt = 0; attempt < 2; attempt++)
+      try {
+        const response = await caller({
+          merchantId,
+          feature: "scribe.copy",
+          system:
+            "Write a factual intro (400 characters max), two worked examples (240 characters each), and sign pitch (90 characters max). Fixed terms remain outside your output. Use only numbers in the supplied spec, no net/effective price, promises, offers, URLs or new conditions. The sign pitch must contain the exact supplied milestone text. ASCII punctuation; no newlines. Do not estimate customer behavior or delivery timing. Make the examples illustrate the same rule and constraints.",
+          user: dataBlock({
+            businessName: name,
+            voiceHints,
+            program: spec,
+            milestone: milestoneText(spec),
+            items,
+          }),
+          schema: Copy,
+          effort: "low",
+        });
+        calls.push(response.callId);
+        if (
+          copyValid(response.value.termsIntro, 400, name, spec) &&
+          response.value.workedExamples.every((e) =>
+            copyValid(e, 240, name, spec),
+          ) &&
+          copyValid(response.value.signPitch, 90, name, spec, {
+            milestone: true,
+          })
+        ) {
+          copy = response.value;
+          copyFallback = false;
+          break;
+        }
+      } catch {
+        break;
+      }
+  return {
+    notes: notes.notes,
+    ...copy,
+    aiCallIds: calls,
+    fallback: notes.fallback || copyFallback,
+  };
+}
+export function validateScribeSpec(
+  spec: ProgramSpec,
+  name: string,
+  items: string[] = [],
+) {
+  if (
+    spec.noteVariants?.some(
+      (n) => !copyValid(n, 120, name, spec, { notes: true, items }),
+    )
+  )
+    throw new Error("Invalid thank-you note");
+  if (spec.termsIntro && !copyValid(spec.termsIntro, 400, name, spec))
+    throw new Error("Invalid terms intro");
+  if (spec.workedExamples?.some((e) => !copyValid(e, 240, name, spec)))
+    throw new Error("Invalid worked example");
+  if (
+    spec.signPitch &&
+    !copyValid(spec.signPitch, 90, name, spec, { milestone: true })
+  )
+    throw new Error("Invalid sign pitch");
+}

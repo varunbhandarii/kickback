@@ -18,6 +18,17 @@ export const envSchema = z
     PAYPAL_WEBHOOK_ID: blankOptional(),
     ANTHROPIC_API_KEY: blankOptional(),
     ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
+    AI_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((v) => v === "true"),
+    AI_EFFORT_DESIGNER: z.enum(["low", "medium", "high"]).default("high"),
+    AI_MAX_CALLS_PER_MERCHANT_PER_DAY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .default(30),
     KICKBACK_MASTER_KEY: z
       .string()
       .refine(

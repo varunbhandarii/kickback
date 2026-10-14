@@ -90,3 +90,10 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .merchant-shell th { font-size: 12px; color: #677568; white-space: nowrap; }
 .menu-edit-row { display: grid; grid-template-columns: minmax(140px,1fr) 120px auto; gap: 15px; align-items: end; }
 @media(max-width: 600px) { .merchant-shell { padding: 16px; }.menu-edit-row { grid-template-columns: 1fr 100px; }.menu-edit-row button { grid-column: 1 / -1; } }
+.merchant-shell textarea { background: white; border: 1px solid #b4c1b8; border-radius: 8px; padding: 11px; min-width: 0; width: 100%; min-height: 90px; font-weight: 400; resize: vertical; }
+.designer-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,290px),1fr)); gap: 18px; align-items: start; }
+.designer-cards .merchant-card { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.designer-cards h3 { font-size: 20px; font-weight: 700; }
+.metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; }
+.metric-grid dt { font-size: 12px; color: #677568; }.metric-grid dd { font-size: 19px; font-weight: 600; }
+.metric-green { color: #24553d; }.metric-amber { color: #875100; }

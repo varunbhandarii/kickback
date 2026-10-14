@@ -29,6 +29,39 @@ export async function toggleRewards(form: FormData) {
   await setRewardsPaused(user.id, merchant.id, form.get("paused") === "yes");
   revalidatePath("/m");
 }
+export async function dismissIdea(form: FormData) {
+  const { merchant } = await requireFormMerchant(form),
+    { getDb } = await import("@/db"),
+    { suggestions } = await import("@/db/schema"),
+    { and, eq } = await import("drizzle-orm");
+  await getDb()
+    .update(suggestions)
+    .set({ status: "DISMISSED" })
+    .where(
+      and(
+        eq(suggestions.merchantId, merchant.id),
+        eq(suggestions.id, String(form.get("id"))),
+        eq(suggestions.status, "PENDING"),
+      ),
+    );
+  revalidatePath("/m");
+}
+export async function dismissNotice(form: FormData) {
+  const { merchant } = await requireFormMerchant(form),
+    { getDb } = await import("@/db"),
+    { notices } = await import("@/db/schema"),
+    { and, eq } = await import("drizzle-orm");
+  await getDb()
+    .update(notices)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(notices.merchantId, merchant.id),
+        eq(notices.id, String(form.get("id"))),
+      ),
+    );
+  revalidatePath("/m");
+}
 export async function staffAction(form: FormData) {
   const { user, merchant } = await requireFormMerchant(form);
   await setStaff(

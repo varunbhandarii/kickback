@@ -16,6 +16,12 @@ import {
   rewards,
   settings,
   visits,
+  aiCalls,
+  designRuns,
+  guardFlags,
+  notices,
+  suggestions,
+  programs,
 } from "@/db/schema";
 import { audit } from "../audit";
 import { lockMerchant } from "../ledger/locks";
@@ -72,6 +78,17 @@ export async function purgeTenants(now = new Date()) {
           .delete(rawEvents)
           .where(sql`position(${id} in ${rawEvents.payload}::text) > 0`);
       await tx.delete(offsets).where(eq(offsets.merchantId, merchant.id));
+      await tx.delete(guardFlags).where(eq(guardFlags.merchantId, merchant.id));
+      await tx
+        .delete(suggestions)
+        .where(eq(suggestions.merchantId, merchant.id));
+      await tx.delete(designRuns).where(eq(designRuns.merchantId, merchant.id));
+      await tx.delete(aiCalls).where(eq(aiCalls.merchantId, merchant.id));
+      await tx.delete(notices).where(eq(notices.merchantId, merchant.id));
+      await tx
+        .update(programs)
+        .set({ provenance: {} })
+        .where(eq(programs.merchantId, merchant.id));
       await tx.delete(rewards).where(eq(rewards.merchantId, merchant.id));
       await tx.delete(disputes).where(eq(disputes.merchantId, merchant.id));
       await tx
@@ -112,6 +129,7 @@ export async function purgeTenants(now = new Date()) {
           purgeAfter: null,
           stats: {},
           statsUpdatedAt: null,
+          voiceHints: "",
           onboardingStep: "connect",
         })
         .where(eq(merchants.id, merchant.id));
@@ -144,6 +162,40 @@ export async function purgeOperationalMetadata(now = new Date()) {
       ),
     )
     .returning({ key: settings.key });
+  const expired = await getDb()
+    .select({ id: designRuns.id })
+    .from(designRuns)
+    .where(lt(designRuns.expiresAt, now));
+  if (expired.length) {
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(suggestions)
+        .set({ status: "EXPIRED", designRunId: null })
+        .where(
+          inArray(
+            suggestions.designRunId,
+            expired.map((r) => r.id),
+          ),
+        );
+      await tx.delete(designRuns).where(
+        inArray(
+          designRuns.id,
+          expired.map((r) => r.id),
+        ),
+      );
+    });
+  }
+  await getDb()
+    .delete(aiCalls)
+    .where(lt(aiCalls.createdAt, new Date(+now - 90 * 86400000)));
+  await getDb()
+    .delete(notices)
+    .where(
+      and(
+        lt(notices.createdAt, new Date(+now - 90 * 86400000)),
+        sql`${notices.readAt} is not null`,
+      ),
+    );
   return {
     orderKeys: keys.length,
     audits: audits.length,

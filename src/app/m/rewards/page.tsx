@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { rewards, visits, rewardState } from "@/db/schema";
+import { rewards, visits, rewardState, guardFlags } from "@/db/schema";
+import ReviewControls from "./review-controls";
+import { explainReview } from "./actions";
 import { requireMerchant } from "@/lib/dal";
 export default async function RewardsPage({
   searchParams,
@@ -13,9 +15,16 @@ export default async function RewardsPage({
     state = rewardState.enumValues.find((s) => s === query.state),
     page = Math.max(1, Math.min(10000, Number(query.page) || 1));
   const rows = await getDb()
-    .select({ reward: rewards, date: visits.startedAt })
+    .select({ reward: rewards, date: visits.startedAt, flag: guardFlags })
     .from(rewards)
     .innerJoin(visits, eq(visits.id, rewards.visitId))
+    .leftJoin(
+      guardFlags,
+      and(
+        eq(guardFlags.rewardId, rewards.id),
+        eq(guardFlags.merchantId, merchant.id),
+      ),
+    )
     .where(
       and(
         eq(rewards.merchantId, merchant.id),
@@ -44,15 +53,20 @@ export default async function RewardsPage({
         <table>
           <thead>
             <tr>
-              {["State", "Amount", "Visit date", "Refund ID", "Reason"].map(
-                (h) => (
-                  <th key={h}>{h}</th>
-                ),
-              )}
+              {[
+                "State",
+                "Amount",
+                "Visit date",
+                "Refund ID",
+                "Reason",
+                "Guard / review",
+              ].map((h) => (
+                <th key={h}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 100).map(({ reward: r, date }) => (
+            {rows.slice(0, 100).map(({ reward: r, date, flag }) => (
               <tr key={r.id}>
                 <td>{r.state}</td>
                 <td>
@@ -63,6 +77,57 @@ export default async function RewardsPage({
                 </td>
                 <td>{r.refundId ?? "—"}</td>
                 <td>{r.reason ?? "—"}</td>
+                <td>
+                  {flag && (
+                    <>
+                      <p>
+                        Score {flag.score} · {flag.tier} · {flag.decision}
+                      </p>
+                      <ul>
+                        {flag.reasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                      {(flag.explanation as { explanation?: string } | null)
+                        ?.explanation && (
+                        <p>
+                          {
+                            (flag.explanation as { explanation: string })
+                              .explanation
+                          }
+                        </p>
+                      )}
+                      {(
+                        flag.explanation as {
+                          suggested_rule_change?: unknown;
+                        } | null
+                      )?.suggested_rule_change != null && (
+                        <Link href={"/m/onboarding/program?rule=" + flag.id}>
+                          Review suggested rule change
+                        </Link>
+                      )}
+                      <form action={explainReview}>
+                        <input
+                          type="hidden"
+                          name="merchantId"
+                          value={merchant.id}
+                        />
+                        <input type="hidden" name="rewardId" value={r.id} />
+                        <button className="secondary">
+                          Explain these signals
+                        </button>
+                      </form>
+                      {flag.decision === "PENDING" &&
+                        r.state === "HELD" &&
+                        r.reason === "REVIEW" && (
+                          <ReviewControls
+                            merchantId={merchant.id}
+                            rewardId={r.id}
+                          />
+                        )}
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

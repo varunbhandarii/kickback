@@ -8,6 +8,8 @@ import {
   programs,
   connections,
   customers,
+  designRuns,
+  suggestions,
 } from "@/db/schema";
 import { audit } from "./audit";
 import {
@@ -18,6 +20,15 @@ import {
 } from "./merchant-inputs";
 import { loadProgram, rewardNote, type ProgramSpec } from "./engine/program";
 import { enqueue } from "./rewards/enqueue";
+import { storedDesign, specEdits } from "./ai/service";
+import {
+  candidateFromSpec,
+  candidateSpec,
+  validateCandidates,
+} from "./ai/designer";
+import { designData } from "./ai/designer/context";
+import { simulate, metricsAcceptable } from "./engine/simulate";
+import { validateScribeSpec } from "./ai/scribe";
 import { lockMerchant } from "./ledger/locks";
 async function ownership(
   tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
@@ -103,6 +114,12 @@ export async function activateProgram(
   userId: string,
   merchantId: string,
   input: unknown,
+  approval?: {
+    designRunId?: string;
+    candidateId?: string;
+    scribeRunId?: string;
+    liftAssumptionPct?: number;
+  },
 ) {
   const spec = loadProgram(input);
   return getDb().transaction(async (tx) => {
@@ -133,6 +150,134 @@ export async function activateProgram(
     if (importing)
       throw new Error("Wait for history to finish before activating");
     rewardNote(spec, merchant.displayName);
+    validateScribeSpec(
+      spec,
+      merchant.displayName,
+      merchant.menu.map((i) => i.name),
+    );
+    let provenance: Record<string, unknown> = {
+      source: "preset",
+      category: merchant.category,
+      approvedBy: userId,
+      approvedAt: new Date().toISOString(),
+    };
+    if (approval?.designRunId) {
+      if (
+        approval.liftAssumptionPct !== undefined &&
+        (!Number.isFinite(approval.liftAssumptionPct) ||
+          approval.liftAssumptionPct < 3 ||
+          approval.liftAssumptionPct > 10)
+      )
+        throw new Error("INVALID_LIFT_ASSUMPTION");
+      const design = await storedDesign(tx, merchantId, approval.designRunId),
+        selected = design.cards.find(
+          (c) => c.params.id === approval.candidateId,
+        );
+      if (!selected || !selected.acceptable)
+        throw new Error("CANDIDATE_NOT_ACCEPTABLE");
+      const edited = candidateFromSpec(
+        spec,
+        selected.params.id,
+        selected.params.who_it_favors,
+      );
+      validateCandidates(
+        {
+          candidates: design.cards.map((c) =>
+            c.params.id === edited.id ? edited : c.params,
+          ),
+        },
+        { ...design, budgetCents: design.input.budgetCents },
+      );
+      const [current] = await tx
+        .select()
+        .from(programs)
+        .where(
+          and(
+            eq(programs.merchantId, merchantId),
+            eq(programs.status, "ACTIVE"),
+          ),
+        );
+      const data = await designData(
+        {
+          ...merchant,
+          program: current ?? {
+            id: "",
+            merchantId,
+            version: 0,
+            spec,
+            status: "DRAFT",
+            effectiveFrom: new Date(),
+            retiredAt: null,
+            provenance: {},
+          },
+          spec,
+        },
+        design.input,
+        new Date(),
+        tx,
+      );
+      const metrics = simulate(spec, data.rows, merchant.tz, {
+        windowStart: new Date(data.context.windowStart),
+        windowEnd: new Date(data.context.windowEnd),
+        marginPct: design.input.marginPct,
+      });
+      if (!metricsAcceptable(metrics))
+        throw new Error("EDITED_SIMULATION_REJECTED");
+      provenance = {
+        ...provenance,
+        source: "designer",
+        designRunId: approval.designRunId,
+        goal: design.input.goal,
+        budgetCents: design.input.budgetCents,
+        marginPct: design.input.marginPct,
+        liftAssumptionPct:
+          approval.liftAssumptionPct ?? design.input.liftAssumptionPct,
+        candidateId: selected.params.id,
+        candidates: design.cards,
+        model: design.model,
+        promptVersion: design.promptVersion,
+        aiCallIds: design.aiCallIds,
+        chosenEdits: specEdits(candidateSpec(selected.params), spec),
+        selectedMetrics: metrics,
+        includesDemoHistory: design.includesDemoHistory,
+        demoShare: design.demoShare,
+      };
+    }
+    if (approval?.scribeRunId) {
+      const [draft] = await tx
+        .select()
+        .from(designRuns)
+        .where(
+          and(
+            eq(designRuns.id, approval.scribeRunId),
+            eq(designRuns.merchantId, merchantId),
+          ),
+        );
+      if (
+        !draft ||
+        draft.expiresAt < new Date() ||
+        (draft.result as { kind?: string }).kind !== "scribe"
+      )
+        throw new Error("SCRIBE_EXPIRED");
+      provenance.scribe = {
+        draftId: draft.id,
+        aiCallIds: (draft.result as { generated: { aiCallIds: string[] } })
+          .generated.aiCallIds,
+        approvedBy: userId,
+        approvedAt: new Date().toISOString(),
+      };
+    }
+    if (approval?.designRunId)
+      await tx
+        .update(suggestions)
+        .set({ status: "APPROVED" })
+        .where(
+          and(
+            eq(suggestions.merchantId, merchantId),
+            eq(suggestions.designRunId, approval.designRunId),
+            eq(suggestions.status, "PENDING"),
+          ),
+        );
     const previous = await tx
       .select()
       .from(programs)
@@ -152,7 +297,7 @@ export async function activateProgram(
           spec,
           status: "ACTIVE",
           effectiveFrom: new Date(),
-          provenance: { source: "preset", category: merchant.category },
+          provenance,
         })
         .where(eq(programs.id, draft.id));
     else
@@ -162,7 +307,7 @@ export async function activateProgram(
         spec,
         status: "ACTIVE",
         effectiveFrom: new Date(),
-        provenance: { source: "preset", category: merchant.category },
+        provenance,
       });
     await tx
       .update(merchants)

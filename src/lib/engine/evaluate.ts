@@ -5,6 +5,7 @@ export type VisitView = {
   amountCents: number;
   status: "PENDING" | "COMPLETED" | "VOID";
   customerKey?: string;
+  source?: string;
 };
 export type RewardView = {
   visitId: string;
@@ -45,12 +46,16 @@ export function evaluate(
   budget: Budget,
   now: Date,
   tz: string,
-  options?: { rewardableFrom?: Date },
+  options?: { rewardableFrom?: Date; includeFixtures?: boolean },
 ) {
   const spec = loadProgram(input),
     target = spec.type === "VISIT_MILESTONE" ? spec.n : spec.spendCents;
   const qualifying = visits
-    .filter((v) => v.startedAt <= now)
+    .filter(
+      (v) =>
+        v.startedAt <= now &&
+        (options?.includeFixtures || v.source !== "FIXTURE"),
+    )
     .toSorted(
       (a, b) =>
         a.startedAt.getTime() - b.startedAt.getTime() ||
@@ -69,7 +74,10 @@ export function evaluate(
     basisVisitIds: string[];
   }[] = [];
   let basis: string[] = [];
-  let current = 0,
+  let current =
+      spec.type === "VISIT_MILESTONE" && !rewards.length
+        ? (spec.endowedProgress ?? 0)
+        : 0,
     anchor: Date | undefined,
     blocked: Block | undefined;
   let daily = budget.dailyUsedCents,
@@ -144,72 +152,4 @@ export function evaluate(
   };
   return { intents, consumed, progress };
 }
-export function simulate(
-  spec: ProgramSpec,
-  visits: VisitView[],
-  tz = "America/New_York",
-) {
-  const paid: (RewardView & { customerKey: string })[] = [],
-    histories = new Map<string, VisitView[]>(),
-    earners = new Set<string>();
-  for (const visit of visits.toSorted(
-    (a, b) =>
-      a.startedAt.getTime() - b.startedAt.getTime() || a.id.localeCompare(b.id),
-  )) {
-    const key = visit.customerKey ?? "customer",
-      history = histories.get(key) ?? [];
-    history.push(visit);
-    histories.set(key, history);
-    const day = localDay(visit.startedAt, tz),
-      month = day.slice(0, 7),
-      sum = (rows: RewardView[]) => rows.reduce((s, r) => s + r.amountCents, 0);
-    const budget = {
-      dailyUsedCents: sum(
-        paid.filter((r) => localDay(r.createdAt, tz) === day),
-      ),
-      monthlyUsedCents: sum(
-        paid.filter((r) => localDay(r.createdAt, tz).startsWith(month)),
-      ),
-      customerMonthlyUsedCents: sum(
-        paid.filter(
-          (r) =>
-            r.customerKey === key &&
-            localDay(r.createdAt, tz).startsWith(month),
-        ),
-      ),
-    };
-    const result = evaluate(
-      spec,
-      history,
-      paid.filter((r) => r.customerKey === key),
-      budget,
-      visit.startedAt,
-      tz,
-    );
-    for (const item of result.intents) {
-      paid.push({
-        ...item,
-        state: "CONFIRMED",
-        createdAt: visit.startedAt,
-        customerKey: key,
-      });
-      earners.add(key);
-    }
-    for (const item of result.consumed)
-      paid.push({
-        ...item,
-        amountCents: 0,
-        state: "CANCELLED",
-        createdAt: visit.startedAt,
-        customerKey: key,
-      });
-  }
-  return {
-    costCents: paid.reduce((sum, r) => sum + r.amountCents, 0),
-    earners: earners.size,
-    rewards: paid.filter((r) => r.state === "CONFIRMED").length,
-    refundCountRatio:
-      paid.filter((r) => r.state === "CONFIRMED").length /
-      Math.max(1, visits.filter((v) => v.status === "COMPLETED").length),
-  };
-}
+export { simulate } from "./simulate";
