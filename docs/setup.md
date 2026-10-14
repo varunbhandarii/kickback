@@ -28,7 +28,7 @@ The demo login is `demo@kickback.local`, with `DEMO_USER_PASSWORD` from your pri
 
 Configure `RESEND_API_KEY` and `EMAIL_FROM` with a [verified domain](https://resend.com/docs/dashboard/domains/introduction). Keep the key restricted to sending from that domain. Password reset, email verification, single-use sign-in links, and co-owner invitations become available when both are present. Invitations grant full owner access only to a signed-in user who has verified the invited inbox; links expire after seven days. Operational emails go only to merchant owners. Give the cron these two variables as well to enable scheduled owner notices.
 
-To enable PayPal sign-in, configure Log in with PayPal on the platform app with `${APP_URL}/api/auth/callback/paypal` as its exact return URL, name/email profile permissions, and the public privacy/terms URLs. Set `PAYPAL_LOGIN_ENABLED=true` after saving that configuration. This merchant login is separate from payment approval and partner consent. Email/password sign-in remains available when this option is disabled.
+To enable PayPal sign-in, configure Log in with PayPal on the platform app with `${APP_URL}/api/auth/callback/paypal` as its exact return URL, name/email profile permissions, and the public privacy/terms URLs. Set `PAYPAL_LOGIN_ENABLED=true` after saving that configuration. When creating the Render Blueprint, enter `false` for this manually managed flag until the provider setup is ready; later Blueprint syncs preserve your choice. This merchant login is separate from payment approval and partner consent. Email/password sign-in remains available when this option is disabled.
 
 ## Environment
 

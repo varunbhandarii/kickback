@@ -41,7 +41,7 @@ services:
       - key: DEMO_USER_PASSWORD
         sync: false
       - key: PAYPAL_LOGIN_ENABLED
-        value: "false"
+        sync: false
       - key: TENANT_PURGE_HOURS
         value: "48"
       - key: BACKFILL_DAYS
