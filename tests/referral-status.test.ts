@@ -97,6 +97,39 @@ beforeEach(async () => {
 });
 afterAll(teardownDb);
 describe("partner onboarding truth and callback ownership", () => {
+  it("fetches the full status when a tracking lookup returns only an ID and links", async () => {
+    const { merchant } = await pending();
+    request
+      .mockResolvedValueOnce({
+        merchant_id: "ABCDEF1234567",
+        tracking_id: merchant.id,
+        links: [{ rel: "self", href: "https://untrusted.example/status" }],
+      })
+      .mockResolvedValueOnce(integration(merchant.id));
+    const connection = await refreshPartnerConnection(merchant.id);
+    expect(connection?.status).toBe("CONNECTED");
+    expect(request.mock.calls[1][0]).toBe(
+      "/v1/customer/partners/PARTNER123456/merchant-integrations/ABCDEF1234567",
+    );
+    expect((await getDb().select().from(merchants))[0].onboardingStep).toBe(
+      "history",
+    );
+  });
+  it("does not connect a summary whose full response identifies another account", async () => {
+    const { merchant } = await pending();
+    request
+      .mockResolvedValueOnce({
+        merchant_id: "ABCDEF1234567",
+        tracking_id: merchant.id,
+      })
+      .mockResolvedValueOnce({
+        ...integration(merchant.id),
+        merchant_id: "OTHER12345678",
+      });
+    const connection = await refreshPartnerConnection(merchant.id);
+    expect(connection?.status).toBe("PENDING");
+    expect(connection?.merchantIdInPayPal).toBeNull();
+  });
   it("ignores approval hints until PayPal confirms email and scopes", async () => {
     const { id, merchant } = await pending();
     sessionOwner.id = id;

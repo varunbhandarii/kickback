@@ -209,6 +209,26 @@ export async function refreshPartnerConnection(
         integration = row;
     }
   }
+  // The tracking lookup can return only an ID and a link to the full status.
+  if (
+    integration?.merchant_id &&
+    /^[A-Z0-9]{13}$/.test(integration.merchant_id) &&
+    (typeof integration.payments_receivable !== "boolean" ||
+      typeof integration.primary_email_confirmed !== "boolean" ||
+      !integration.oauth_integrations)
+  ) {
+    const details = await client.request<Integration>(
+      `/v1/customer/partners/${env.PAYPAL_PARTNER_ID}/merchant-integrations/${encodeURIComponent(integration.merchant_id)}`,
+      { priority: "high", deadline },
+    );
+    integration =
+      details.merchant_id === integration.merchant_id &&
+      (!details.tracking_id ||
+        details.tracking_id === connection.trackingId ||
+        connection.merchantIdInPayPal === details.merchant_id)
+        ? details
+        : undefined;
+  }
   if (
     !integration?.merchant_id ||
     !/^[A-Z0-9]{13}$/.test(integration.merchant_id)
