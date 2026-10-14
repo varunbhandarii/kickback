@@ -26,6 +26,7 @@ describe("customer-facing copy validators", () => {
           : ++attempt === 1
             ? {
                 ...templateCopy(name, spec),
+                termsIntro: "Rewards are limited.",
                 signPitch: "Come back five times.",
               }
             : templateCopy(name, spec);
@@ -51,7 +52,10 @@ describe("customer-facing copy validators", () => {
     );
     expect(result.fallback).toBe(false);
     expect(result.aiCallIds).toHaveLength(3);
-    expect(requests[2].user).toContain("Local validation rejected signPitch");
+    expect(requests[2].user).toContain(
+      "Local validation rejected termsIntro, signPitch",
+    );
+    expect(requests[2].user).toContain("disclaimers: limited");
     expect(requests[2].user).toContain("allowedNumericValues");
     expect(result.signPitch).toContain("5 visits");
   });

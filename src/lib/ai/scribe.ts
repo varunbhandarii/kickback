@@ -138,7 +138,7 @@ export async function generateScribe(
           merchantId,
           feature: "scribe.copy",
           system:
-            "Write a factual intro (400 characters max), two worked examples (240 characters each), and sign pitch (90 characters max). Fixed terms remain outside your output. Use only supplied allowedNumericValues; do not number examples, invent purchase amounts, or calculate new totals. No net/effective price, promises, offers, URLs or new conditions. The sign pitch must contain the supplied milestone as an unchanged literal substring, including its digits. ASCII punctuation only; no newlines. Do not estimate customer behavior or delivery timing. Make the examples illustrate the same rule and constraints without adding numbers.",
+            "Write a brief positive intro, preferably one sentence (400 characters max), two worked examples (240 characters each), and sign pitch (90 characters max). The application supplies all fixed legal terms; do not write disclaimers or repeat those terms in the intro. Use only supplied allowedNumericValues; do not number examples, invent purchase amounts, or calculate new totals. Never use these words or their variants, even in a negation or disclaimer: discount, offer, sale, coupon, code, limited, refer, net, effectively, guarantee, promise, instantly, free. Use factual wording such as a monthly cap rather than limited rewards. No URLs or new conditions. The sign pitch must contain the supplied milestone as an unchanged literal substring, including its digits. ASCII punctuation only; no newlines. Do not estimate customer behavior or delivery timing. Make the examples illustrate the same rule and constraints without adding numbers.",
           user: dataBlock({
             businessName: name,
             voiceHints,
@@ -183,10 +183,23 @@ export async function generateScribe(
           copyFallback = false;
           break;
         }
+        const rejectedWords = [
+          response.value.termsIntro,
+          ...response.value.workedExamples,
+          response.value.signPitch,
+        ].flatMap((text) => {
+          const body = text.replaceAll(name, "");
+          return [
+            ...(body.match(denied) ?? []).slice(0, 1),
+            ...(body.match(/\bfree\b/i) ?? []).slice(0, 1),
+          ];
+        });
         correction =
           "Local validation rejected " +
           invalid.join(", ") +
-          ". Use simple ASCII text, only allowedNumericValues, and the unchanged milestone in signPitch. Keep each field within its stated character limit.";
+          ". Use simple ASCII text, only allowedNumericValues, and the unchanged milestone in signPitch. Keep each field within its stated character limit. Remove banned wording, including in disclaimers: " +
+          [...new Set(rejectedWords)].join(", ") +
+          ".";
       } catch {
         break;
       }
