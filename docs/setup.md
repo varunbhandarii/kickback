@@ -90,6 +90,14 @@ npm run webhook:register -- https://your-app.onrender.com
 6. Seed through `POST /api/jobs/seed-demo` with `Authorization: Bearer <hosted JOBS_BEARER>`, then open `/pay/rosas`. This repeatable endpoint requires sandbox demo mode.
 7. Check a sandbox purchase, refund, verified webhooks, buyer activity, and successful cron runs. Confirm Render credits in Billing; supplying a payment card alone does not establish a credit balance.
 
+## Program intelligence
+
+Set `ANTHROPIC_API_KEY` privately on the web service. For weekly suggestions, explicitly give the cron access to the same key through `kickback-shared`. Keep the existing key when configuring an existing deployment. Defaults are `ANTHROPIC_MODEL=claude-opus-5-5`, `AI_ENABLED=true`, `AI_EFFORT_DESIGNER=high`, and `AI_MAX_CALLS_PER_MERCHANT_PER_DAY=30`. The limit counts each structured generation attempt, including regeneration after invalid output. Setting `AI_ENABLED=false` leaves manual presets, template copy and deterministic reward review available.
+
+Merchant dashboard → Settings → Your voice saves copy preferences. Edit program → Program Designer proposes three backtested rules. **Use this** fills an editable form; **Generate or regenerate copy** prepares six notes and public copy. Only **Activate program** publishes the reviewed rule and copy. **Rewards** lists Guard scores and owner review controls. Weekly suggestions remain pending until an owner approves them.
+
+For sandbox design demonstrations, run `npm run seed:history -- --merchant rosas --category cafe --customers 150 --days 90`, or use the protected `POST /api/jobs/seed-history` endpoint with `{ "merchant": "rosas", "category": "cafe", "customers": 150, "days": 90 }`. Synthetic history is labeled, excluded from live reward eligibility and never refundable. Add `--clear` to the CLI (or `"clear": true` to the endpoint) to remove synthetic history before replacing it; real purchases remain intact. See [Program Designer, Guard and Scribe](ai.md) for validation, privacy and fallback behavior.
+
 ## Recovery and pause controls
 
 `npm run pause -- rosas` / `npm run resume -- rosas` change the configured database's merchant switch; use `all` globally. Hosted equivalents are bearer-authenticated `POST /api/admin/merchants/rosas/pause` (or `resume`) and `/api/admin/rewards/pause` (or `resume`). An API request already accepted by PayPal can finish after a pause.

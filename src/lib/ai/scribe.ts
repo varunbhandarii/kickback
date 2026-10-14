@@ -129,7 +129,8 @@ export async function generateScribe(
     ),
     calls = [...notes.aiCallIds];
   let copy = templateCopy(name, spec),
-    copyFallback = true;
+    copyFallback = true,
+    correction = "";
   if (aiEnabled())
     for (let attempt = 0; attempt < 2; attempt++)
       try {
@@ -137,31 +138,55 @@ export async function generateScribe(
           merchantId,
           feature: "scribe.copy",
           system:
-            "Write a factual intro (400 characters max), two worked examples (240 characters each), and sign pitch (90 characters max). Fixed terms remain outside your output. Use only numbers in the supplied spec, no net/effective price, promises, offers, URLs or new conditions. The sign pitch must contain the exact supplied milestone text. ASCII punctuation; no newlines. Do not estimate customer behavior or delivery timing. Make the examples illustrate the same rule and constraints.",
+            "Write a factual intro (400 characters max), two worked examples (240 characters each), and sign pitch (90 characters max). Fixed terms remain outside your output. Use only supplied allowedNumericValues; do not number examples, invent purchase amounts, or calculate new totals. No net/effective price, promises, offers, URLs or new conditions. The sign pitch must contain the supplied milestone as an unchanged literal substring, including its digits. ASCII punctuation only; no newlines. Do not estimate customer behavior or delivery timing. Make the examples illustrate the same rule and constraints without adding numbers.",
           user: dataBlock({
             businessName: name,
             voiceHints,
             program: spec,
             milestone: milestoneText(spec),
             items,
+            allowedNumericValues: [
+              spec.rewardCents / 100,
+              spec.windowDays,
+              spec.minTicketCents / 100,
+              spec.perCustomerMonthlyCapCents / 100,
+              spec.dailyBudgetCents / 100,
+              spec.monthlyBudgetCents / 100,
+              spec.mergeWindowMin,
+              ...(spec.type === "VISIT_MILESTONE"
+                ? [spec.n, spec.endowedProgress ?? 0]
+                : [spec.spendCents / 100]),
+            ],
+            correction,
           }),
           schema: Copy,
           effort: "low",
         });
         calls.push(response.callId);
-        if (
-          copyValid(response.value.termsIntro, 400, name, spec) &&
-          response.value.workedExamples.every((e) =>
-            copyValid(e, 240, name, spec),
-          ) &&
-          copyValid(response.value.signPitch, 90, name, spec, {
+        const invalid = [
+          ...(!copyValid(response.value.termsIntro, 400, name, spec)
+            ? ["termsIntro"]
+            : []),
+          ...response.value.workedExamples.flatMap((e, index) =>
+            copyValid(e, 240, name, spec)
+              ? []
+              : ["workedExamples[" + index + "]"],
+          ),
+          ...(!copyValid(response.value.signPitch, 90, name, spec, {
             milestone: true,
           })
-        ) {
+            ? ["signPitch"]
+            : []),
+        ];
+        if (!invalid.length) {
           copy = response.value;
           copyFallback = false;
           break;
         }
+        correction =
+          "Local validation rejected " +
+          invalid.join(", ") +
+          ". Use simple ASCII text, only allowedNumericValues, and the unchanged milestone in signPitch. Keep each field within its stated character limit.";
       } catch {
         break;
       }

@@ -1,14 +1,60 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import type { StructuredCaller } from "@/lib/ai/client";
+vi.mock("@/lib/ai/client", async (original) => ({
+  ...(await original<typeof import("@/lib/ai/client")>()),
+  aiEnabled: () => true,
+}));
 import {
   copyValid,
   templateNotes,
   templateCopy,
   validateScribeSpec,
+  generateScribe,
 } from "@/lib/ai/scribe";
 import { defaultProgram, rewardNote } from "@/lib/engine/program";
 const spec = { ...defaultProgram },
   name = "Rosa's Cafe";
 describe("customer-facing copy validators", () => {
+  it("regenerates rejected public fields with feedback and exact numeric constraints", async () => {
+    const requests: { feature: string; user: string }[] = [];
+    let attempt = 0;
+    const caller: StructuredCaller = async (opts) => {
+      requests.push({ feature: opts.feature, user: opts.user });
+      const value =
+        opts.feature === "scribe.notes"
+          ? { notes: templateNotes(name, spec) }
+          : ++attempt === 1
+            ? {
+                ...templateCopy(name, spec),
+                signPitch: "Come back five times.",
+              }
+            : templateCopy(name, spec);
+      return {
+        value: opts.schema.parse(value),
+        callId: "call-" + requests.length,
+        model: "test",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      };
+    };
+    const result = await generateScribe(
+      "merchant",
+      name,
+      "Friendly",
+      spec,
+      ["Latte"],
+      caller,
+    );
+    expect(result.fallback).toBe(false);
+    expect(result.aiCallIds).toHaveLength(3);
+    expect(requests[2].user).toContain("Local validation rejected signPitch");
+    expect(requests[2].user).toContain("allowedNumericValues");
+    expect(result.signPitch).toContain("5 visits");
+  });
   it("validates six deterministic notes and public copy", () => {
     const notes = templateNotes(name, spec),
       copy = templateCopy(name, spec);
