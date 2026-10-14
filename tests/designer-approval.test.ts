@@ -15,7 +15,7 @@ import { createDesign } from "@/lib/ai/service";
 import { activateProgram } from "@/lib/onboarding";
 import { candidateSpec } from "@/lib/ai/designer";
 import { executeAnalystTool, analystToolDefinitions } from "@/lib/ai/tools";
-import { fixture, resetDb, setupDb, teardownDb } from "./helpers/db";
+import { fixture, purchase, resetDb, setupDb, teardownDb } from "./helpers/db";
 describe("stored design approval and analyst scope", () => {
   beforeAll(setupDb);
   beforeEach(async () => {
@@ -131,5 +131,39 @@ describe("stored design approval and analyst scope", () => {
       ),
     ).resolves.toMatchObject({ fallback: true });
     expect(await getDb().select().from(programs)).toHaveLength(2);
+  });
+  it("simulates a lower minimum against its eligible history and labels replay facts", async () => {
+    const merchant = await fixture(),
+      actor = await owner(merchant.id);
+    const payment = await purchase(merchant, { amount: 100 });
+    const result = await executeAnalystTool(
+      "simulate_rules",
+      {
+        merchantId: merchant.id,
+        spec: { ...merchant.spec, minTicketCents: 100 },
+      },
+      { userId: actor, merchantId: merchant.id },
+    );
+    expect(result).toMatchObject({
+      qualifyingVisits: 1,
+      qualifyingRevenueCents: 100,
+    });
+    const { captures, visits } = await import("@/db/schema");
+    const [capture] = await getDb()
+      .select()
+      .from(captures)
+      .where(eq(captures.id, payment.result.captureId!));
+    await getDb()
+      .update(visits)
+      .set({ source: "REPLAY" })
+      .where(eq(visits.id, capture.visitId!));
+    expect(
+      await executeAnalystTool(
+        "explain_customer",
+        { merchantId: merchant.id, customerKey: capture.customerKey! },
+        { userId: actor, merchantId: merchant.id },
+      ),
+    ).toMatchObject({ includesDemoHistory: true });
+    expect(await getDb().select().from(programs)).toHaveLength(1);
   });
 });

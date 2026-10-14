@@ -118,7 +118,9 @@ export async function executeAnalystTool(
         ]),
       ),
       flaggedRewards: rows.filter((r) => r.score >= 30).length,
-      includesDemoHistory: history.some((v) => v.source === "FIXTURE"),
+      includesDemoHistory: history.some(
+        (v) => v.source === "FIXTURE" || v.source === "REPLAY",
+      ),
     };
   }
   const params =
@@ -134,18 +136,17 @@ export async function executeAnalystTool(
           marginPct: prior(merchant.category).marginPct,
           liftAssumptionPct: 5,
         };
-  const data = await designData(merchant, params);
+  const simulationSpec =
+    name === "simulate_rules"
+      ? loadProgram((parsed as z.infer<typeof toolSchemas.simulate_rules>).spec)
+      : merchant.spec;
+  const data = await designData({ ...merchant, spec: simulationSpec }, params);
   if (name === "simulate_rules")
-    return simulate(
-      loadProgram((parsed as z.infer<typeof toolSchemas.simulate_rules>).spec),
-      data.rows,
-      merchant.tz,
-      {
-        windowStart: new Date(data.context.windowStart),
-        windowEnd: new Date(data.context.windowEnd),
-        marginPct: params.marginPct,
-      },
-    );
+    return simulate(simulationSpec, data.rows, merchant.tz, {
+      windowStart: new Date(data.context.windowStart),
+      windowEnd: new Date(data.context.windowEnd),
+      marginPct: params.marginPct,
+    });
   return designPipeline(merchant.id, data.context, data.rows, {
     tz: merchant.tz,
   });
