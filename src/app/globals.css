@@ -78,7 +78,7 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .merchant-shell .link-button,.merchant-shell .merchant-link { background: transparent; color: #24553d; padding: 0; text-decoration: underline; }
 .merchant-shell .muted { color: #677568; font-size: 13px; }
 .merchant-shell [role=alert] { color: #9d2634; }
-.merchant-shell p:not(.studio-surface *)rogress { width: 100%; accent-color: #24553d; }
+.merchant-shell progress:not(.studio-surface *) { width: 100%; accent-color: #24553d; }
 .merchant-title,.filter-form { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
 .merchant-banner { padding: 16px; background: #e8f0e7; border-radius: 10px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 20px; }
