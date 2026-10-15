@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DigestCard from "./digest-card";
 import { and, desc, eq, gte, inArray, lt, sql, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
@@ -27,7 +28,7 @@ const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 export default async function Dashboard() {
   const { user, merchant } = await requireMerchant(),
     db = getDb(),
-    from = sql`now()-interval '30 days'`;
+    from = sql`(((now() at time zone ${merchant.tz})::date - 29)::timestamp at time zone ${merchant.tz})`;
   const [
     businesses,
     [connection],
@@ -185,6 +186,7 @@ export default async function Dashboard() {
         </p>
       )}
       <div className="merchant-grid">
+        <DigestCard merchantId={merchant.id}/>
         {!!fixtureCount.n && (
           <p className="merchant-banner">
             Includes demo history (synthetic): {fixtureCount.n} visits. These

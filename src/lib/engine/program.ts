@@ -14,6 +14,19 @@ const base = {
   termsIntro: z.string().max(400).optional(),
   workedExamples: z.array(z.string().max(240)).max(2).optional(),
   signPitch: z.string().max(90).optional(),
+  winBack: z
+    .object({
+      gapDays: z.union([
+        z.literal(30),
+        z.literal(45),
+        z.literal(60),
+        z.literal(90),
+      ]),
+      rewardCents: cents.min(100).max(1000),
+      minVisits: z.number().int().min(3).max(100),
+    })
+    .optional(),
+  welcomeBackNote: z.string().min(1).max(120).optional(),
 };
 export const programSchema = z.discriminatedUnion("type", [
   z.object({
@@ -31,6 +44,19 @@ export const programSchema = z.discriminatedUnion("type", [
 export type ProgramSpec = z.infer<typeof programSchema>;
 export const loadProgram = (value: unknown) => {
   const spec = programSchema.parse(value);
+  if (
+    spec.winBack &&
+    spec.winBack.rewardCents >
+      Math.min(
+        spec.rewardCents,
+        spec.dailyBudgetCents,
+        spec.monthlyBudgetCents,
+        spec.perCustomerMonthlyCapCents,
+      )
+  )
+    throw new Error(
+      "Welcome-back reward cannot exceed the regular reward or budgets",
+    );
   if (
     spec.type === "VISIT_MILESTONE" &&
     (spec.endowedProgress ?? 0) > spec.n - 2
@@ -55,6 +81,7 @@ export function rewardNote(
   spec: ProgramSpec,
   merchant: string,
   rewardId?: string,
+  kind = "REGULAR",
 ) {
   const hash = rewardId
     ? [...rewardId].reduce(
@@ -66,7 +93,11 @@ export function rewardNote(
     rewardId && spec.noteVariants?.length
       ? spec.noteVariants[hash % spec.noteVariants.length]
       : undefined;
-  const note = (variant ?? spec.noteTemplate)
+  const note = (
+    kind === "WIN_BACK"
+      ? (spec.welcomeBackNote ?? "Welcome back to {merchant}. Thank you!")
+      : (variant ?? spec.noteTemplate)
+  )
     .replaceAll(
       "{n}",
       spec.type === "VISIT_MILESTONE"

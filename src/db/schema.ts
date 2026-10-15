@@ -315,6 +315,7 @@ export const rewards = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     guardScore: integer("guard_score").notNull().default(0),
+    kind: text("kind").notNull().default("REGULAR"),
     merchantId: uuid("merchant_id")
       .notNull()
       .references(() => merchants.id),
@@ -542,4 +543,55 @@ export const suggestions = pgTable(
       .on(t.merchantId)
       .where(sql`${t.status} = 'PENDING'`),
   ],
+);
+
+export const cockpitStates = pgTable("cockpit_states", {
+  merchantId: uuid("merchant_id")
+    .primaryKey()
+    .references(() => merchants.id),
+  state: jsonb("state").notNull(),
+  studioVersion: text("studio_version").notNull(),
+  updatedBy: text("updated_by").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: at("updated_at").notNull().defaultNow(),
+});
+export const cockpitThreads = pgTable(
+  "cockpit_threads",
+  {
+    threadId: text("thread_id").primaryKey(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    summary: jsonb("summary").notNull(),
+    messages: jsonb("messages").notNull(),
+    updatedAt: at("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("cockpit_threads_tenant_idx").on(t.merchantId, t.updatedAt)],
+);
+export const aiTurnCache = pgTable(
+  "ai_turn_cache",
+  {
+    toolUseId: text("tool_use_id").primaryKey(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    content: jsonb("content").notNull(),
+    createdAt: at("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("ai_turn_cache_retention_idx").on(t.createdAt)],
+);
+export const digests = pgTable(
+  "digests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    weekStart: text("week_start").notNull(),
+    body: jsonb("body").notNull(),
+    createdAt: at("created_at").notNull().defaultNow(),
+    readAt: at("read_at"),
+  },
+  (t) => [uniqueIndex("digests_week_idx").on(t.merchantId, t.weekStart)],
 );

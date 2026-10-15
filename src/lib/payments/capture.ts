@@ -14,6 +14,7 @@ export function publicReward(row: typeof rewards.$inferSelect | undefined) {
     ? {
         id: row.id,
         amountCents: rewardNetCents(row),
+        kind: row.kind,
         state: row.state,
         token: signRewardToken(row.id),
       }

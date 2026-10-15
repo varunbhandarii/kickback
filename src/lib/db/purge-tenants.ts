@@ -22,6 +22,10 @@ import {
   notices,
   suggestions,
   programs,
+  cockpitStates,
+  cockpitThreads,
+  aiTurnCache,
+  digests,
 } from "@/db/schema";
 import { audit } from "../audit";
 import { lockMerchant } from "../ledger/locks";
@@ -78,6 +82,16 @@ export async function purgeTenants(now = new Date()) {
           .delete(rawEvents)
           .where(sql`position(${id} in ${rawEvents.payload}::text) > 0`);
       await tx.delete(offsets).where(eq(offsets.merchantId, merchant.id));
+      await tx
+        .delete(cockpitStates)
+        .where(eq(cockpitStates.merchantId, merchant.id));
+      await tx
+        .delete(cockpitThreads)
+        .where(eq(cockpitThreads.merchantId, merchant.id));
+      await tx
+        .delete(aiTurnCache)
+        .where(eq(aiTurnCache.merchantId, merchant.id));
+      await tx.delete(digests).where(eq(digests.merchantId, merchant.id));
       await tx.delete(guardFlags).where(eq(guardFlags.merchantId, merchant.id));
       await tx
         .delete(suggestions)
@@ -140,6 +154,15 @@ export async function purgeTenants(now = new Date()) {
   return purged;
 }
 export async function purgeOperationalMetadata(now = new Date()) {
+  await getDb()
+    .delete(aiTurnCache)
+    .where(lt(aiTurnCache.createdAt, new Date(+now - 86400000)));
+  await getDb()
+    .delete(cockpitThreads)
+    .where(lt(cockpitThreads.updatedAt, new Date(+now - 30 * 86400000)));
+  await getDb()
+    .delete(digests)
+    .where(lt(digests.createdAt, new Date(+now - 90 * 86400000)));
   const keys = await getDb()
     .delete(settings)
     .where(

@@ -9,7 +9,9 @@ import {
   rewards,
   settings,
   user,
+  digests,
 } from "@/db/schema";
+import { digestText, type DigestBody } from "./digests";
 export function emailConfigured() {
   const env = getEnv();
   return Boolean(env.RESEND_API_KEY && env.EMAIL_FROM);
@@ -109,5 +111,62 @@ export async function sendOperationalNotices(deadline = Date.now() + 10000) {
       sent++;
     }
   }
+  await sendDigestEmails(deadline);
   return sent;
+}
+async function sendDigestEmails(deadline: number) {
+  const rows = await getDb()
+    .select({ digest: digests, merchant: merchants })
+    .from(digests)
+    .innerJoin(merchants, eq(merchants.id, digests.merchantId))
+    .where(
+      and(
+        eq(merchants.status, "ACTIVE"),
+        sql`${digests.createdAt} > now()-interval '7 days'`,
+      ),
+    );
+  for (const { digest, merchant } of rows) {
+    if (Date.now() > deadline - 1000) break;
+    const owners = await getDb()
+      .select({ id: user.id, email: user.email })
+      .from(merchantUsers)
+      .innerJoin(user, eq(user.id, merchantUsers.userId))
+      .where(
+        and(
+          eq(merchantUsers.merchantId, merchant.id),
+          eq(merchantUsers.role, "OWNER"),
+        ),
+      );
+    for (const owner of owners) {
+      if (Date.now() > deadline - 1000) break;
+      if (/(@example\.com|\.example\.com|\.local|\.test)$/.test(owner.email))
+        continue;
+      const key = `email:${merchant.id}:digest:${digest.id}:${owner.id}`,
+        [sent] = await getDb()
+          .select()
+          .from(settings)
+          .where(eq(settings.key, key));
+      if (sent) continue;
+      try {
+        if (
+          await sendMerchantEmail(
+            owner.email,
+            `Kickback: ${merchant.displayName} this week`,
+            digestText(digest.body as DigestBody) +
+              " Open your dashboard: " +
+              new URL("/m", getEnv().APP_URL).href,
+            createHash("sha256").update(key).digest("hex"),
+          )
+        )
+          await getDb()
+            .insert(settings)
+            .values({ key, value: { sent: true } })
+            .onConflictDoNothing();
+      } catch {
+        console.error(
+          JSON.stringify({ action: "digest_email_delivery_failed" }),
+        );
+      }
+    }
+  }
 }

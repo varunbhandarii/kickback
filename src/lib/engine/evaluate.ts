@@ -12,6 +12,8 @@ export type RewardView = {
   state: string;
   amountCents: number;
   createdAt: Date;
+  kind?: string;
+  reason?: string | null;
 };
 export type Budget = {
   dailyUsedCents: number;
@@ -62,16 +64,27 @@ export function evaluate(
         a.id.localeCompare(b.id),
     );
   const existing = new Set(rewards.map((r) => r.visitId));
+  const regularExisting = new Set(
+    rewards
+      .filter((r) => r.kind !== "WIN_BACK" && r.reason !== "WIN_BACK")
+      .map((r) => r.visitId),
+  );
+  const winBackDates = rewards
+    .filter((r) => r.kind === "WIN_BACK" || r.reason === "WIN_BACK")
+    .map((r) => r.createdAt);
+  let priorCompleted: VisitView[] = [];
   const intents: {
     visitId: string;
     amountCents: number;
     reason: string;
     basisVisitIds: string[];
+    kind?: "WIN_BACK";
   }[] = [];
   const consumed: {
     visitId: string;
     reason: Block | "BEFORE_PROGRAM_START";
     basisVisitIds: string[];
+    kind?: "WIN_BACK";
   }[] = [];
   let basis: string[] = [];
   let current =
@@ -85,7 +98,11 @@ export function evaluate(
     customer = budget.customerMonthlyUsedCents;
   for (const visit of qualifying) {
     // A consumed cycle remains a boundary when an earlier purchase is returned.
-    if (existing.has(visit.id)) {
+    const before = priorCompleted;
+    const qualifies =
+      visit.status === "COMPLETED" && visit.amountCents >= spec.minTicketCents;
+    if (qualifies) priorCompleted = [...priorCompleted, visit];
+    if (regularExisting.has(visit.id)) {
       current = 0;
       anchor = undefined;
       basis = [];
@@ -104,41 +121,68 @@ export function evaluate(
     anchor ??= visit.startedAt;
     basis.push(visit.id);
     current += spec.type === "VISIT_MILESTONE" ? 1 : visit.amountCents;
-    if (current < target) continue;
-    current = 0;
-    anchor = undefined;
-    const basisVisitIds = basis;
-    basis = [];
+    const regular = current >= target;
+    const winBack =
+      !regular &&
+      !existing.has(visit.id) &&
+      spec.winBack &&
+      before.length >= spec.winBack.minVisits &&
+      dayNumber(visit.startedAt, tz) -
+        dayNumber(before.at(-1)!.startedAt, tz) >=
+        spec.winBack.gapDays &&
+      !winBackDates.some(
+        (d) =>
+          d <= visit.startedAt &&
+          dayNumber(visit.startedAt, tz) - dayNumber(d, tz) < 180,
+      ) &&
+      (options?.includeFixtures ||
+        !["BACKFILL", "FIXTURE"].includes(visit.source ?? ""));
+    if (!regular && !winBack) continue;
+    if (existing.has(visit.id)) continue;
+    const amountCents = regular ? spec.rewardCents : spec.winBack!.rewardCents;
+    const basisVisitIds = regular ? basis : [visit.id];
+    if (regular) {
+      current = 0;
+      anchor = undefined;
+      basis = [];
+    } else winBackDates.push(visit.startedAt);
     if (options?.rewardableFrom && visit.startedAt < options.rewardableFrom) {
       consumed.push({
         visitId: visit.id,
         reason: "BEFORE_PROGRAM_START",
         basisVisitIds,
+        ...(!regular ? { kind: "WIN_BACK" as const } : {}),
       });
       continue;
     }
     const reason: Block | undefined =
-      customer + spec.rewardCents > spec.perCustomerMonthlyCapCents
+      customer + amountCents > spec.perCustomerMonthlyCapCents
         ? "MONTHLY_CAP"
-        : daily + spec.rewardCents > spec.dailyBudgetCents
+        : daily + amountCents > spec.dailyBudgetCents
           ? "DAILY_BUDGET"
-          : monthly + spec.rewardCents > spec.monthlyBudgetCents
+          : monthly + amountCents > spec.monthlyBudgetCents
             ? "MONTHLY_BUDGET"
             : undefined;
     if (reason) {
       blocked = reason;
-      consumed.push({ visitId: visit.id, reason, basisVisitIds });
+      consumed.push({
+        visitId: visit.id,
+        reason,
+        basisVisitIds,
+        ...(!regular ? { kind: "WIN_BACK" as const } : {}),
+      });
       continue;
     }
     intents.push({
       visitId: visit.id,
-      amountCents: spec.rewardCents,
-      reason: spec.type,
+      amountCents,
+      reason: regular ? spec.type : "WIN_BACK",
       basisVisitIds,
+      ...(!regular ? { kind: "WIN_BACK" as const } : {}),
     });
-    daily += spec.rewardCents;
-    monthly += spec.rewardCents;
-    customer += spec.rewardCents;
+    daily += amountCents;
+    monthly += amountCents;
+    customer += amountCents;
   }
   if (anchor && dayNumber(now, tz) - dayNumber(anchor, tz) > spec.windowDays)
     current = 0;

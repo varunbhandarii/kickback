@@ -1,0 +1,186 @@
+import type { AgReportState } from "ag-studio";
+import type { CockpitContext } from "./context";
+import type { KickbackRegistry } from "./widgets/registry";
+export function defaultState(
+  c: CockpitContext,
+): AgReportState<KickbackRegistry> {
+  const field = (id: string) => ({ id }),
+    sum = (id: string) => ({ id, aggregation: "sum" as const });
+  const title = (text: string) => ({ title: { text, enabled: true } });
+  const lastDay = c.asOfDay ?? "1970-01-01",
+    firstDay = new Date(lastDay + "T00:00Z");
+  firstDay.setUTCDate(firstDay.getUTCDate() - 29);
+  const state: AgReportState<KickbackRegistry> = {
+    version: "3.0.0",
+    selectedPageId: "loyalty",
+    pages: [
+      {
+        id: "loyalty",
+        layout: { columns: 24, rowHeight: 32, minWidth: 720 },
+        widgets: {
+          rule: {
+            type: "text",
+            dataMapping: {},
+            format: {
+              ...title("Your program"),
+              style: {
+                text:
+                  c.rule +
+                  (c.demo
+                    ? " Includes demo history (synthetic and replay)."
+                    : ""),
+                typography: { fontSize: 16 },
+              },
+            },
+          },
+          paid: {
+            type: "value",
+            dataMapping: {
+              value: [sum("daily_summary.rewards_paid")],
+              sparklineX: [field("daily_summary.day")],
+            },
+            format: title("Rewards paid · 30 days"),
+          },
+          cost: {
+            type: "value",
+            dataMapping: {
+              value: [sum("daily_summary.reward_cost")],
+              sparklineX: [field("daily_summary.day")],
+            },
+            format: title("Reward cost · 30 days"),
+          },
+          visits: {
+            type: "value",
+            dataMapping: {
+              value: [sum("daily_summary.visits")],
+              sparklineX: [field("daily_summary.day")],
+            },
+            format: title("Completed visits · 30 days"),
+          },
+          held: {
+            type: "value",
+            dataMapping: { value: [sum("daily_summary.held")] },
+            format: title("Needs attention · 30 days"),
+          },
+          trend: {
+            type: "line-chart",
+            dataMapping: {
+              categoryKey: [field("daily_summary.day")],
+              valueKey: [
+                sum("daily_summary.visits"),
+                sum("daily_summary.qualifying_visits"),
+              ],
+            },
+            format: title("Visits by day"),
+          },
+          wallets: {
+            type: "donut-chart",
+            dataMapping: {
+              categoryKey: [field("visits.wallet")],
+              valueKey: [{ id: "visits.id", aggregation: "count" }],
+            },
+            format: title("Wallet mix"),
+          },
+          customers: {
+            type: "grid",
+            dataMapping: {
+              cols: [
+                "label",
+                "wallets",
+                "last_seen",
+                "visits_90d",
+                "spend_90d",
+                "progress_current",
+                "progress_target",
+                "status",
+                "is_demo",
+              ].map((x) => field("customers." + x)),
+            },
+            sort: [
+              { field: field("customers.progress_pct"), direction: "desc" },
+            ],
+            format: title("Regulars"),
+          },
+          rewards: {
+            type: "grid",
+            dataMapping: {
+              cols: [
+                "customer_label",
+                "state",
+                "amount",
+                "created_at",
+                "guard_score",
+                "reason",
+              ].map((x) => field("rewards." + x)),
+            },
+            format: title("Needs attention"),
+          },
+          funnel: {
+            type: "reward-funnel",
+            dataMapping: {
+              step: [field("customers.progress_current")],
+              count: [{ id: "customers.label", aggregation: "count" }],
+            },
+            format: title("Reward Funnel"),
+          },
+          ledger: {
+            type: "customer-ledger",
+            dataMapping: {
+              time: [field("visits.started_at")],
+              amount: [field("visits.amount")],
+              who: [field("visits.customer_label")],
+            },
+            format: title("Customer Ledger"),
+          },
+        },
+        widgetLayout: {
+          rule: { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 3 },
+          paid: { xTrack: 0, yTrack: 3, xSpan: 6, ySpan: 5 },
+          cost: { xTrack: 6, yTrack: 3, xSpan: 6, ySpan: 5 },
+          visits: { xTrack: 12, yTrack: 3, xSpan: 6, ySpan: 5 },
+          held: { xTrack: 18, yTrack: 3, xSpan: 6, ySpan: 5 },
+          trend: { xTrack: 0, yTrack: 8, xSpan: 16, ySpan: 10 },
+          wallets: { xTrack: 16, yTrack: 8, xSpan: 8, ySpan: 10 },
+          customers: { xTrack: 0, yTrack: 18, xSpan: 14, ySpan: 12 },
+          rewards: { xTrack: 14, yTrack: 18, xSpan: 10, ySpan: 12 },
+          funnel: { xTrack: 0, yTrack: 30, xSpan: 12, ySpan: 12 },
+          ledger: { xTrack: 12, yTrack: 30, xSpan: 12, ySpan: 12 },
+        },
+        filter: {
+          widget: {
+            ...Object.fromEntries(
+              ["paid", "cost", "visits", "held", "trend"].map((id) => [
+                id,
+                [
+                  {
+                    field: field("daily_summary.day"),
+                    model: {
+                      operator: "between",
+                      value: [firstDay.toISOString().slice(0, 10), lastDay],
+                    },
+                  },
+                ],
+              ]),
+            ),
+            rewards: [
+              {
+                field: field("rewards.state"),
+                model: { operator: "isIn", value: ["HELD", "FAILED"] },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+  const page = state.pages[0];
+  for (const position of Object.values(page.widgetLayout ?? {}))
+    if (position && position.yTrack >= 3) position.yTrack += 6;
+  page.widgets!.source = {
+    type: "button-filter",
+    dataMapping: { value: [field("visits.source")] },
+    format: title("Visit source · demo history is labeled"),
+  };
+  page.widgetLayout!.source = { xTrack: 0, yTrack: 3, xSpan: 24, ySpan: 6 };
+  return state;
+}

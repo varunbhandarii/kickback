@@ -6,7 +6,7 @@ import type { ProgramSpec } from "@/lib/engine/program";
 import type { Progress } from "@/lib/engine/evaluate";
 import type { MenuItem } from "@/db/schema";
 import type {} from "@/app/dev/pay-test/pay-test";
-type Reward = { id: string; token: string; state: string; amountCents: number };
+type Reward = { id: string; token: string; state: string; amountCents: number; kind?:string };
 type Result = {
   captureStatus: string;
   recognized: boolean;
@@ -373,7 +373,7 @@ export default function PayClient({
                     ? "This reward is no longer eligible. See the program terms."
                     : ["FAILED", "HELD", "DEFERRED"].includes(reward.state)
                       ? "Your reward needs a check. Please contact the merchant."
-                      : `${money(reward.amountCents)} is on its way back to your wallet.`}
+                        : `${reward.kind === "WIN_BACK" ? "Welcome back — " : ""}${money(reward.amountCents)} is on its way back to your wallet.`}
             </p>
           ) : progress?.blocked ? (
             <p>

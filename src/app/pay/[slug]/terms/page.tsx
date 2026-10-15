@@ -23,6 +23,7 @@ export default async function ProgramTerms({
         </p>
       )}
       <div className="terms-copy">
+        {s.winBack&&<p>Welcome-back reward: after at least {s.winBack.minVisits} earlier qualifying visits, a qualifying return visit following a gap of at least {s.winBack.gapDays} calendar days can earn {money(s.winBack.rewardCents)} back. Limited to once per customer per 180 calendar days. A regular milestone takes precedence on the same visit. The same budgets, caps and eligibility rules apply; imported past visits never trigger a retroactive welcome-back refund.</p>}
         {s.termsIntro && <p>{s.termsIntro}</p>}
         <p>
           Earn {money(s.rewardCents)} back after{" "}

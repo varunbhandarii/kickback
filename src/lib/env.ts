@@ -23,6 +23,13 @@ export const envSchema = z
       .default("true")
       .transform((v) => v === "true"),
     AI_EFFORT_DESIGNER: z.enum(["low", "medium", "high"]).default("high"),
+    AI_EFFORT_ANALYST: z.enum(["low", "medium", "high"]).default("low"),
+    AI_MAX_ANALYST_TURNS_PER_MERCHANT_PER_DAY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .default(80),
     AI_MAX_CALLS_PER_MERCHANT_PER_DAY: z.coerce
       .number()
       .int()

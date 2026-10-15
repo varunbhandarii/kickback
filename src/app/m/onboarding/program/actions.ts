@@ -44,6 +44,14 @@ export async function submitProgram(
         termsIntro: String(form.get("termsIntro") ?? "") || undefined,
         workedExamples: JSON.parse(String(form.get("workedExamples") ?? "[]")),
         signPitch: String(form.get("signPitch") ?? "") || undefined,
+        winBack:
+          form.get("winBack") === "on"
+            ? {
+                gapDays: Number(form.get("winBackGap")),
+                rewardCents: dollarsToCents(String(form.get("winBackReward"))),
+                minVisits: Number(form.get("winBackMin")),
+              }
+            : undefined,
       },
       {
         designRunId: String(form.get("designRunId") ?? "") || undefined,

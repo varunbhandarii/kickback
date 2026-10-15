@@ -15,6 +15,7 @@ export default async function MerchantLayout({
         </Link>
         <nav>
           <Link href="/m">Overview</Link>
+          <Link href="/m/cockpit" prefetch={false}>Cockpit</Link>
           <Link href="/m/customers">Customers</Link>
           <Link href="/m/rewards">Rewards</Link>
           <Link href="/m/settings">Settings</Link>

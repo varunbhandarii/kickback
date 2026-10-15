@@ -24,6 +24,7 @@ export default function ProgramForm({
   const [choice, setChoice] = useState(category),
     [spec, setSpec] = useState(initial ?? preset(category)),
     [state, action, pending] = useActionState(submitProgram, {});
+  const [winBackEstimate, setWinBackEstimate] = useState("");
   const [designRef, setDesignRef] = useState({
       runId: "",
       candidateId: "",
@@ -58,6 +59,123 @@ export default function ProgramForm({
       />
       <form action={action} className="merchant-card">
         <input name="merchantId" type="hidden" value={merchantId} />
+        <fieldset>
+          <legend>Welcome-back reward (optional)</legend>
+          <label>
+            <input
+              type="checkbox"
+              name="winBack"
+              checked={!!spec.winBack}
+              onChange={(e) => {
+                setSpec({
+                  ...spec,
+                  winBack: e.target.checked
+                    ? {
+                        gapDays: 30,
+                        rewardCents: Math.min(200, spec.rewardCents),
+                        minVisits: 3,
+                      }
+                    : undefined,
+                } as ProgramSpec);
+                setWinBackEstimate("");
+              }}
+            />{" "}
+            Thank returning regulars after a long gap
+          </label>
+          {spec.winBack && (
+            <>
+              <label>
+                Gap in days
+                <select
+                  name="winBackGap"
+                  value={spec.winBack.gapDays}
+                  onChange={(e) =>
+                    setSpec({
+                      ...spec,
+                      winBack: {
+                        ...spec.winBack!,
+                        gapDays: Number(e.target.value) as 30 | 45 | 60 | 90,
+                      },
+                    })
+                  }
+                >
+                  {[30, 45, 60, 90].map((n) => (
+                    <option key={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Reward in USD
+                <input
+                  name="winBackReward"
+                  type="number"
+                  min="1"
+                  max={Math.min(10, spec.rewardCents / 100)}
+                  step="0.01"
+                  value={spec.winBack.rewardCents / 100}
+                  onChange={(e) =>
+                    setSpec({
+                      ...spec,
+                      winBack: {
+                        ...spec.winBack!,
+                        rewardCents: Math.round(Number(e.target.value) * 100),
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Previous qualifying visits
+                <input
+                  name="winBackMin"
+                  type="number"
+                  min="3"
+                  max="100"
+                  value={spec.winBack.minVisits}
+                  onChange={(e) =>
+                    setSpec({
+                      ...spec,
+                      winBack: {
+                        ...spec.winBack!,
+                        minVisits: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </label>
+              <p>
+                At most once per 180 days. A regular milestone takes precedence.
+                Existing caps and budgets apply; imported history never triggers
+                a retroactive payment.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  setWinBackEstimate("Backtesting…");
+                  try {
+                    const r = await fetch("/api/analyst/simulate_rules", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ spec }),
+                    });
+                    if (!r.ok) throw new Error();
+                    const m = await r.json();
+                    setWinBackEstimate(
+                      `${m.winBackRewards} welcome-back rewards / $${(m.winBackCostCents / 100).toFixed(2)} over 90 days.${m.demoShare > 0 ? " Includes demo history." : ""}`,
+                    );
+                  } catch {
+                    setWinBackEstimate(
+                      "Estimate unavailable. Check the rule and limits.",
+                    );
+                  }
+                }}
+              >
+                Estimate welcome-back cost
+              </button>
+              <p role="status">{winBackEstimate}</p>
+            </>
+          )}
+        </fieldset>
         <input name="designRunId" type="hidden" value={designRef.runId} />
         <input name="candidateId" type="hidden" value={designRef.candidateId} />
         <input

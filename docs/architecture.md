@@ -53,3 +53,14 @@ The webhook listener accepts the platform registration and configured merchant r
 Raw payloads expire after 47 hours and are purged every five minutes; rows older than 48 hours trigger an alert. Outages can delay physical deletion. Minimal receipts and the pseudonymous ledger remain; data minimization does not establish a retention or marketing-use policy exemption.
 
 Web and cron share hosted platform/database credentials through `kickback-shared`, preserving the master key. Pool limits are five/two. `/api/health` is DB-free; `?deep=1` checks Postgres. Structured logs record reward transitions and provider debug IDs without contact data. Checkout polls a one-hour signed reward token every two seconds for up to one minute; the worker continues after the tab closes.
+## Cockpit and analyst
+
+`/m/cockpit` loads AG Studio in a separate client-only chunk. Overview and checkout do not import Studio. Its four async tables expose tenant-scoped customer codes, visits, rewards and zero-filled daily summaries; payer identities and raw webhook payloads are not sources. Query requests authenticate the owner, derive the business from the session/cookie, validate every field/operator and push filtering, sorting and bounded pages into PostgreSQL. Unknown filters fail explicitly.
+
+Layouts are size-capped, saved per business and resettable. Invalid state falls back safely. Reward Funnel and Customer Ledger use React/SVG and the same data engine and cross-filters. Synthetic/replay history is labeled; synthetic captures are never refundable.
+
+The Analyst uses the existing scoped metrics, risk, customer, simulation and design tools. API routes overwrite any supplied merchant ID with the authenticated actor. Studio page/widget agents handle chart layout. No model tool can approve a reward, issue a refund, message a customer, resolve a dispute or activate a program.
+
+The server maps Claude's stream to AG-UI events and a final completion envelope. It enforces a separate daily Analyst quota and records token usage without prompts. Tenant-scoped assistant tool-turn content is retained for up to 24 hours so subsequent tool results can replay signed thinking correctly. Conversations retain at most20 threads per business and expire after 30 idle days. The retention job and tenant purge remove these records; approved financial records retain their existing lifecycle.
+
+Sunday digests are deterministic in-app summaries. Optional welcome-back rewards are owner-activated rules; they use the ordinary Guard, budgets, caps and refund executor, with regular milestones taking precedence.

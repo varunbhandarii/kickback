@@ -1,0 +1,46 @@
+import "server-only";
+import { sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { loadMerchant } from "../merchants";
+import { querySchema, querySuffix } from "./query";
+import type { z } from "zod";
+export async function studioQuery(
+  merchant: { id: string; slug: string; tz: string },
+  body: z.infer<typeof querySchema>,
+  now = new Date(),
+) {
+  const loaded = await loadMerchant(merchant.slug, true),
+    minimum = loaded?.spec.minTicketCents ?? 1;
+  const base = sql`with v as (select v.*, to_char(v.started_at at time zone ${merchant.tz}, 'YYYY-MM-DD') as "day",
+    to_char(v.started_at at time zone ${merchant.tz}, 'Dy') weekday,
+    'Regular #' || upper(substr(v.customer_key,1,4)) customer_label,
+    (v.status='COMPLETED' and v.amount_cents >= ${minimum}) qualifying,
+    case when v.source in ('PAY_PAGE','WEBHOOK') then 'LIVE' else v.source::text end source_label,
+    (select count(*)::int from captures c where c.visit_id=v.id and c.merchant_id=${merchant.id}) captures,
+    coalesce((select string_agg(distinct c.wallet::text, ', ') from captures c where c.visit_id=v.id and c.merchant_id=${merchant.id}),'') wallet
+    from visits v where v.merchant_id=${merchant.id} and v.started_at >= ${now.toISOString()}::timestamptz-interval '180 days' and v.started_at <= ${now.toISOString()}::timestamptz),
+    r as (select r.*, 'Regular #' || upper(substr(r.customer_key,1,4)) customer_label from rewards r where r.merchant_id=${merchant.id})`;
+  let rows;
+  if (body.table === "visits")
+    rows = sql`select id,customer_key,customer_label,day,started_at,weekday,amount_cents/100.0 amount,wallet,status,source_label source,captures,qualifying from v`;
+  else if (body.table === "rewards")
+    rows = sql`select id,customer_key,customer_label,created_at,sent_at,state,tier,(amount_cents-offset_applied_cents)/100.0 amount,reason,guard_score,refund_id,note from r`;
+  else if (body.table === "customers")
+    rows = sql`select c.key,'Regular #' || upper(substr(c.key,1,4)) label,array_to_string(c.wallets,', ') wallets,c.first_seen,c.last_seen,c.status,
+    coalesce(a.visits,0)::int visits_90d,coalesce(a.spend,0)/100.0 spend_90d,
+    coalesce((c.progress_json->>'current')::numeric,0) progress_current,coalesce((c.progress_json->>'target')::numeric,${loaded?.spec.type === "VISIT_MILESTONE" ? loaded.spec.n : (loaded?.spec.spendCents ?? 0)}) progress_target,
+    ${loaded?.spec.type === "VISIT_MILESTONE" ? "visits" : "spend"} progress_kind,
+    coalesce((c.progress_json->>'current')::numeric / nullif((c.progress_json->>'target')::numeric,0),0) progress_pct,coalesce(a.demo,false) is_demo
+    from customers c left join (select customer_key,count(*) filter(where qualifying)::int visits,coalesce(sum(amount_cents) filter(where qualifying),0) spend,bool_or(source in ('FIXTURE','REPLAY')) demo from v where started_at >= ${now.toISOString()}::timestamptz-interval '90 days' group by customer_key) a on a.customer_key=c.key where c.merchant_id=${merchant.id}`;
+  else
+    rows = sql`select d.day::text as "day",coalesce(a.visits,0)::int visits,coalesce(a.q,0)::int qualifying_visits,coalesce(a.customers,0)::int customers,coalesce(a.revenue,0)/100.0 revenue,coalesce(b.paid,0)::int rewards_paid,coalesce(b.cost,0)/100.0 reward_cost,coalesce(h.held,0)::int held,coalesce(a.demo,0)::int demo_visits
+    from (select generate_series((${now.toISOString()}::timestamptz at time zone ${merchant.tz})::date-179,(${now.toISOString()}::timestamptz at time zone ${merchant.tz})::date,interval '1 day')::date as "day") d
+    left join (select day,count(*) filter(where status='COMPLETED') visits,count(*) filter(where qualifying) q,count(distinct customer_key) filter(where status='COMPLETED') customers,sum(amount_cents) filter(where status='COMPLETED') revenue,count(*) filter(where source in ('FIXTURE','REPLAY') and status='COMPLETED') demo from v group by day) a on a.day=d.day::text
+    left join (select (sent_at at time zone ${merchant.tz})::date as "day",count(*) paid,sum(amount_cents-offset_applied_cents) cost from r where state in ('SENT','CONFIRMED') group by 1) b on b.day=d.day
+    left join (select (created_at at time zone ${merchant.tz})::date as "day",count(*) held from r where state in ('HELD','FAILED') group by 1) h on h.day=d.day`;
+  const result = await getDb().execute(
+    sql`${base}, rows as (${rows}) ${querySuffix(body, merchant.tz, now)}`,
+  );
+  const returned = result as unknown as { rows?: Record<string, unknown>[] };
+  return { data: returned.rows ?? Array.from(result) };
+}

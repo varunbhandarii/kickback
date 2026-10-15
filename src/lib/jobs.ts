@@ -9,6 +9,7 @@ import { sweepHistory } from "./history/worker";
 import { sendOperationalNotices } from "./email";
 import { refreshNotices } from "./guard/notices";
 import { weeklySuggestions } from "./ai/weekly";
+import { weeklyDigests } from "./digests";
 export async function runJobs() {
   const started = Date.now(),
     deadline = started + 45000;
@@ -27,6 +28,8 @@ export async function runJobs() {
     Date.now() < deadline - 2000 ? await sendOperationalNotices(deadline) : 0;
   const guardNotices =
     Date.now() < deadline - 5000 ? await refreshNotices(deadline) : 0;
+  const digests =
+    Date.now() < deadline - 2000 ? await weeklyDigests(deadline) : 0;
   const ideas =
     Date.now() < deadline - 10000 ? await weeklySuggestions(deadline) : 0;
   const [overdue] = await getDb()
@@ -49,6 +52,7 @@ export async function runJobs() {
     notices,
     guardNotices,
     ideas,
+    digests,
     deleted,
     retentionOverdue: overdue.count,
     elapsedMs: Date.now() - started,

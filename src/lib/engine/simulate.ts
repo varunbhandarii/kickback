@@ -6,6 +6,8 @@ import {
 } from "./evaluate";
 import { loadProgram, type ProgramSpec } from "./program";
 export type Metrics = {
+  winBackRewards: number;
+  winBackCostCents: number;
   costCents: number;
   costCents90: number;
   monthlyCostCents: number;
@@ -126,6 +128,10 @@ export function simulate(
   const revenue = history.reduce((s, v) => s + v.amountCents, 0),
     gmvRatio = cost / Math.max(1, revenue);
   return {
+    winBackRewards: paid.filter((r) => r.reason === "WIN_BACK").length,
+    winBackCostCents: paid
+      .filter((r) => r.reason === "WIN_BACK")
+      .reduce((s, r) => s + r.amountCents, 0),
     costCents: cost,
     costCents90: cost,
     monthlyCostCents: Math.round(cost / 3),

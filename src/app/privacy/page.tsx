@@ -37,6 +37,16 @@ export default function Privacy() {
       </p>
       <h2 className="mt-8 text-xl font-semibold">Your choices</h2>
       <p className="mt-4">
+        The Cockpit shows business-specific customer codes, not customer
+        contacts. If the business uses the Analyst, relevant program rules,
+        pseudonymous codes, metrics and chart instructions are sent to Anthropic
+        to answer questions. The Analyst cannot move money or change a program.
+        Conversations are kept for up to 30 idle days, with at most 20 per
+        business; provider tool-turn data expires after 24 hours. Scheduled
+        cleanup can be delayed by outages. Disconnecting schedules this business
+        data for deletion too.
+      </p>
+      <p className="mt-4">
         We send no customer marketing messages, sell no customer profiles, and
         do not match customers across businesses. Customers can pay another way
         through the merchant to avoid recognition. Merchants can disconnect in

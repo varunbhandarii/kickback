@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, guardFlags, merchants, rewards, visits } from "@/db/schema";
 import { programSchema, loadProgram } from "../engine/program";
@@ -44,11 +44,30 @@ export async function executeAnalystTool(
       .where(eq(merchants.id, actor.merchantId)),
     merchant = await loadMerchant(business.slug, true);
   if (!merchant || business.purgeAfter) throw new Error("BUSINESS_UNAVAILABLE");
-  if (name === "program_metrics")
-    return programMetrics(
+  if (name === "program_metrics") {
+    const metrics = await programMetrics(
       actor.merchantId,
       (parsed as z.infer<typeof toolSchemas.program_metrics>).days,
     );
+    const [demo] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(visits)
+      .where(
+        and(
+          eq(visits.merchantId, actor.merchantId),
+          gte(
+            visits.startedAt,
+            new Date(
+              Date.now() -
+                (parsed as z.infer<typeof toolSchemas.program_metrics>).days *
+                  86400000,
+            ),
+          ),
+          sql`${visits.source} in ('FIXTURE','REPLAY')`,
+        ),
+      );
+    return { ...metrics, includesDemoHistory: demo.n > 0 };
+  }
   if (name === "flag_abuse") {
     const p = parsed as z.infer<typeof toolSchemas.flag_abuse>;
     return getDb()

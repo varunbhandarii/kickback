@@ -50,6 +50,10 @@ services:
         value: "6"
       - key: ANTHROPIC_MODEL
         value: claude-opus-5-5
+      - key: AI_MAX_ANALYST_TURNS_PER_MERCHANT_PER_DAY
+        value: "80"
+      - key: AI_EFFORT_ANALYST
+        value: low
       - key: KICKBACK_MASTER_KEY
         generateValue: true
       - key: JOBS_BEARER

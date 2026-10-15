@@ -175,7 +175,10 @@ export async function enqueue(
     ...result.intents,
     ...result.consumed.map((v) => ({
       ...v,
-      amountCents: merchant.spec.rewardCents,
+      amountCents:
+        v.kind === "WIN_BACK"
+          ? merchant.spec.winBack!.rewardCents
+          : merchant.spec.rewardCents,
       blocked: true,
     })),
   ]) {
@@ -234,6 +237,7 @@ export async function enqueue(
       .insert(rewards)
       .values({
         id: rewardId,
+        kind: item.kind === "WIN_BACK" ? "WIN_BACK" : "REGULAR",
         guardScore: guard.score,
         merchantId: merchant.id,
         customerKey: key,
@@ -246,7 +250,12 @@ export async function enqueue(
         state,
         tier: guard.tier,
         requestId: randomUUID(),
-        note: rewardNote(merchant.spec, merchant.displayName, rewardId),
+        note: rewardNote(
+          merchant.spec,
+          merchant.displayName,
+          rewardId,
+          item.kind === "WIN_BACK" ? "WIN_BACK" : "REGULAR",
+        ),
         reason: disconnected
           ? "DISCONNECTED"
           : customer?.status === "EXCLUDED"

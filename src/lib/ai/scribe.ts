@@ -215,6 +215,7 @@ export function validateScribeSpec(
   name: string,
   items: string[] = [],
 ) {
+  if(spec.welcomeBackNote && (!spec.welcomeBackNote.includes(name) || !copyValid(spec.welcomeBackNote,120,name,spec))) throw new Error("Invalid welcome-back note");
   if (
     spec.noteVariants?.some(
       (n) => !copyValid(n, 120, name, spec, { notes: true, items }),
