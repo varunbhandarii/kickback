@@ -10,6 +10,11 @@ export function summarizeTool(name: string, data: unknown): string {
     text = `90-day retrospective: monthly cost ${dollars(d.monthlyCostCents)}, earners ${d.earners}/${d.customers}, share reaching ${(Number(d.shareReaching) * 100).toFixed(2)}%, first reward ${d.medianDaysToFirstReward ?? "unavailable"} days, refund-count ratio ${(Number(d.refundCountRatio) * 100).toFixed(2)}%, cost/revenue ${(Number(d.gmvRatio) * 100).toFixed(2)}%, share of rewards to the top 10% of customers by visits ${(Number(d.top10RewardShare) * 100).toFixed(2)}%, break-even lift ${d.requiredLiftPct}%.`;
   if (name === "design_program")
     text += " Open /m/onboarding/program to review and activate.";
+  if (name === "cohort_metrics")
+    text =
+      JSON.stringify(data) +
+      " Recent cohorts have incomplete follow-up. " +
+      String(d.caption ?? "");
   return (
     text +
     (Number(d.demoShare) > 0 || d.includesDemoHistory
@@ -32,6 +37,13 @@ export function analystTools(api: AgStudioApi) {
       return ctx.success(summarizeTool(name, data), data);
     };
   return [
+    api.defineAiTool({
+      name: "cohort_metrics",
+      description:
+        "Read twelve monthly first-visit cohorts, second-visit rates and the honest measurement limit; not causal lift.",
+      params: (s) => s.object({}),
+      execute: execute("cohort_metrics"),
+    }),
     api.defineAiTool({
       name: "program_metrics",
       description: "Read actual payment/reward metrics for the last 1–90 days.",

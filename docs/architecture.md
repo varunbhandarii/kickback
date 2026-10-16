@@ -53,9 +53,10 @@ The webhook listener accepts the platform registration and configured merchant r
 Raw payloads expire after 47 hours and are purged every five minutes; rows older than 48 hours trigger an alert. Outages can delay physical deletion. Minimal receipts and the pseudonymous ledger remain; data minimization does not establish a retention or marketing-use policy exemption.
 
 Web and cron share hosted platform/database credentials through `kickback-shared`, preserving the master key. Pool limits are five/two. `/api/health` is DB-free; `?deep=1` checks Postgres. Structured logs record reward transitions and provider debug IDs without contact data. Checkout polls a one-hour signed reward token every two seconds for up to one minute; the worker continues after the tab closes.
+
 ## Cockpit and analyst
 
-`/m/cockpit` loads AG Studio in a separate client-only chunk. Overview and checkout do not import Studio. Its four async tables expose tenant-scoped customer codes, visits, rewards and zero-filled daily summaries; payer identities and raw webhook payloads are not sources. Query requests authenticate the owner, derive the business from the session/cookie, validate every field/operator and push filtering, sorting and bounded pages into PostgreSQL. Unknown filters fail explicitly.
+`/m/cockpit` loads AG Studio in a separate client-only chunk. Overview and checkout do not import Studio. Its six async tables expose tenant-scoped customer codes, visits, rewards, zero-filled daily summaries, monthly cohorts and Analyst usage; payer identities and raw webhook payloads are not sources. Query requests authenticate the owner, derive the business from the session/cookie, validate every field/operator and push filtering, sorting and bounded pages into PostgreSQL. Unknown filters fail explicitly.
 
 Layouts are size-capped, saved per business and resettable. Invalid state falls back safely. Reward Funnel and Customer Ledger use React/SVG and the same data engine and cross-filters. Synthetic/replay history is labeled; synthetic captures are never refundable.
 
@@ -64,3 +65,15 @@ The Analyst uses the existing scoped metrics, risk, customer, simulation and des
 The server maps Claude's stream to AG-UI events and a final completion envelope. It enforces a separate daily Analyst quota and records token usage without prompts. Tenant-scoped assistant tool-turn content is retained for up to 24 hours so subsequent tool results can replay signed thinking correctly. Conversations retain at most20 threads per business and expire after 30 idle days. The retention job and tenant purge remove these records; approved financial records retain their existing lifecycle.
 
 Sunday digests are deterministic in-app summaries. Optional welcome-back rewards are owner-activated rules; they use the ordinary Guard, budgets, caps and refund executor, with regular milestones taking precedence.
+
+## Customer awareness and merchant reporting
+
+Each order includes one receipt item with the menu/payment name, deterministic program sentence, terms URL, quantity and matching item-total breakdown. No payer personalization is sent before approval. Newly activated thank-you notes must include “loyalty reward”; previously approved versions remain unchanged.
+
+Recognized captures issue a merchant-bound HMAC progress link under a derived key. Verification checks length, signature, issue time, expiry, active merchant/program and token/visitor rate limits. The no-login page has no-store/noindex headers and exposes a summary. Annual rewards CSV streams up to 50,000 rows for the selected owner's business with spreadsheet-formula escaping.
+
+Loyalty and Risk are separate saved pages. Risk includes a weekday-by-wallet pivot with totals, review grid, ledger and usage cards. Inline tool details persist with chat results. Browser observers record run/turn/tool counts only; tokens and costs come from server ai_calls, linked by validated trace IDs. Metadata expires after 90 days. Cohorts exclude FIXTURE history and label REPLAY; recent cohorts have incomplete follow-up and no causal interpretation.
+
+## Workflow reconciliation
+
+The optional kickback-workflows service fans out one reconciliation task per eligible connected merchant. It shares existing import checkpoints, locks and leases with cron. Cron triggers a UTC-day idempotency key and remains the recovery fallback. Tasks have bounded deadlines/retries and pass merchant IDs rather than ledger payloads. Database migrations run only on the web service. A bearer-protected admin endpoint can trigger the same daily run. Weekly digest tasks use the deterministic/idempotent digest implementation.

@@ -6,7 +6,7 @@ Pay at a merchant, collect qualifying visits, and receive a thank-you partial re
 
 ## Try it
 
-Open [Rosa's Cafe](https://kickback-web.onrender.com/pay/rosas), choose a menu item or custom amount, and pay using a US PayPal sandbox buyer. The thank-you screen shows your progress. Five qualifying visits within 60 days earn $2 back; purchases within 120 minutes count as one visit. Venmo appears when the device and buyer are eligible.
+Open [Rosa's Cafe](https://kickback-web.onrender.com/pay/rosas), choose a menu item or custom amount, and pay using a US PayPal sandbox buyer. The thank-you screen shows your progress and a private link to check it between visits. Five qualifying visits within 60 days earn $2 back; purchases within 120 minutes count as one visit. Venmo appears when the device and buyer are eligible.
 
 Read the [program terms](https://kickback-web.onrender.com/pay/rosas/terms). The [printable sign](https://kickback-web.onrender.com/pay/rosas/sign) and [QR image](https://kickback-web.onrender.com/api/pay/rosas/qr.png) point to checkout.
 
@@ -20,7 +20,7 @@ Email/password sign-in works independently of email delivery. Password reset, ve
 
 ## Cockpit
 
-The merchant [Cockpit](https://kickback-web.onrender.com/m/cockpit) combines reward and visit KPIs, charts, customer codes, a review grid, a Reward Funnel and a Customer Ledger. Layouts and recent conversations are saved per business. The lightweight Overview remains available on every screen.
+The merchant [Cockpit](https://kickback-web.onrender.com/m/cockpit) combines reward and visit KPIs, charts, customer codes, a review grid, a Reward Funnel and a Customer Ledger. Layouts and recent conversations are saved per business. Risk adds held/failed rewards, a weekday-by-wallet pivot and Analyst usage. Tool results appear inline in chat. Loyalty includes descriptive repeat-visit cohorts and an explicit measurement limit. The lightweight Overview remains available on every screen.
 
 The Analyst reads the selected business's pseudonymous data and backtests proposed rules through scoped tools. It can arrange charts through AG Studio agents; it cannot approve rewards, refund purchases, message customers or activate programs. Anthropic keys stay on the server. Synthetic and replay history remain labeled. See [architecture](docs/architecture.md) and [AI behavior](docs/ai.md).
 
@@ -90,8 +90,22 @@ Demo businesses can include labeled synthetic history for the design step. These
 
 ## Integrations and privacy
 
-PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10, and a 40-per-minute refill per process. AG Studio provides a separate synthetic dashboard; Anthropic powers validated program proposals, metric-grounded explanations and thank-you copy. Render hosts Next.js, Postgres, and the recovery worker.
+PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10, and a 40-per-minute refill per process. AG Studio provides the merchant Cockpit with labeled demo history; Anthropic powers validated program proposals, metric-grounded explanations and thank-you copy. Render hosts Next.js, Postgres, and the recovery worker.
 
 The loyalty ledger stores merchant-specific HMAC keys and payment identifiers, never provider account IDs, names, email addresses, phone numbers, or Venmo usernames. This pseudonymous ledger remains linkable; it is not a claim of anonymity or a provider-policy exemption. Raw webhook payloads expire after 47 hours and are purged every five minutes, with alerts for retention over 48 hours. Production retention, consent, provider approvals, and deployment licenses must be established before live use. See [architecture](docs/architecture.md) and [privacy](docs/privacy.md).
+
+## Try the API
+
+Import the [Postman collection and placeholder environment](postman/README.md). Keep credentials and session cookies in local values. A public Run in Postman link will be added after the collection is published.
+
+## Tools used
+
+The PayPal Context Plugin from APIMatic guided the server SDK order-lookup integration. Orders are read through `@paypal/paypal-server-sdk`; payment and refund execution retain the existing client. Render Workflows provides the optional reconciliation fan-out, with the five-minute cron as fallback.
+
+## Security and live readiness
+
+Responses include HSTS, nosniff, no-referrer, Permissions-Policy, popup-compatible COOP and frame protection. CSP is report-only; when configured, a first-party relay removes query strings before forwarding violations to Sentry. Private progress links expire and are rate-limited. Tokens are bearer links: anyone holding one can read its summary.
+
+This is a sandbox demonstration, not a live-approved payments platform. Live use requires provider approval for the integration and reward model, operational and policy review, production credentials and licensing. See [live readiness](docs/live-readiness.md), [merchant reports FAQ](docs/merchant-faq.md) and [privacy](docs/privacy.md). Free in sandbox; no contract, no hardware, no customer app. Live pricing will be announced before launch.
 
 [MIT license](LICENSE)

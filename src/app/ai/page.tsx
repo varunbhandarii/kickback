@@ -1,3 +1,4 @@
+export const metadata = { title: "How AI is used" };
 import Link from "next/link";
 export default function AiPage() {
   return (

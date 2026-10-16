@@ -1,3 +1,4 @@
+export const metadata = { title: "Sandbox checkout" };
 import { notFound } from "next/navigation";
 import { sandboxToolsEnabled, getEnv } from "@/lib/env";
 import { merchantContext, merchantName } from "@/lib/paypal/merchants";

@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { loadMerchant } from "../merchants";
 import { querySchema, querySuffix } from "./query";
 import type { z } from "zod";
+import { cohortQuery } from "./cohorts";
 export async function studioQuery(
   merchant: { id: string; slug: string; tz: string },
   body: z.infer<typeof querySchema>,
@@ -11,6 +12,18 @@ export async function studioQuery(
 ) {
   const loaded = await loadMerchant(merchant.slug, true),
     minimum = loaded?.spec.minTicketCents ?? 1;
+  if (body.table === "cohorts")
+    return cohortQuery(merchant, minimum, body, now);
+  if (body.table === "ai_usage") {
+    const result = await getDb().execute(
+      sql`with days as(select generate_series((${now.toISOString()}::timestamptz at time zone ${merchant.tz})::date-29,(${now.toISOString()}::timestamptz at time zone ${merchant.tz})::date,interval '1 day')::date as "day"), usage as(select (started_at at time zone ${merchant.tz})::date as "day",count(*)::int runs,sum(tool_calls)::int tool_calls,sum(tool_errors)::int tool_errors from ai_usage where merchant_id=${merchant.id} group by 1), calls as(select (created_at at time zone ${merchant.tz})::date as "day",count(*)::int turns,sum(input_tokens)::int input_tokens,sum(output_tokens)::int output_tokens,sum((input_tokens*4.0+output_tokens*20.0+cache_read_tokens*.2+cache_write_tokens*5.0)/1000000) cost,percentile_cont(.95) within group(order by latency_ms)::int p95_ms from ai_calls where merchant_id=${merchant.id} and feature='analyst' group by 1),rows as(select d.day::text as "day",coalesce(u.runs,0)::int runs,coalesce(c.turns,0)::int turns,coalesce(u.tool_calls,0)::int tool_calls,coalesce(u.tool_errors,0)::int tool_errors,coalesce(c.input_tokens,0)::int input_tokens,coalesce(c.output_tokens,0)::int output_tokens,coalesce(c.cost,0) cost_cents,coalesce(c.p95_ms,0)::int p95_ms from days d left join usage u on d.day=u.day left join calls c on d.day=c.day) ${querySuffix(body, merchant.tz, now)}`,
+    );
+    return {
+      data:
+        (result as unknown as { rows?: Record<string, unknown>[] }).rows ??
+        Array.from(result),
+    };
+  }
   const base = sql`with v as (select v.*, to_char(v.started_at at time zone ${merchant.tz}, 'YYYY-MM-DD') as "day",
     to_char(v.started_at at time zone ${merchant.tz}, 'Dy') weekday,
     'Regular #' || upper(substr(v.customer_key,1,4)) customer_label,
@@ -22,11 +35,11 @@ export async function studioQuery(
     r as (select r.*, 'Regular #' || upper(substr(r.customer_key,1,4)) customer_label from rewards r where r.merchant_id=${merchant.id})`;
   let rows;
   if (body.table === "visits")
-    rows = sql`select id,customer_key,customer_label,day,started_at,weekday,amount_cents/100.0 amount,wallet,status,source_label source,captures,qualifying from v`;
+    rows = sql`select id,customer_key,customer_label,day,started_at,weekday,amount_cents/100.0 amount,wallet,status::text status,source_label source,captures,qualifying from v`;
   else if (body.table === "rewards")
-    rows = sql`select id,customer_key,customer_label,created_at,sent_at,state,tier,(amount_cents-offset_applied_cents)/100.0 amount,reason,guard_score,refund_id,note from r`;
+    rows = sql`select id,customer_key,customer_label,created_at,sent_at,state::text state,tier::text tier,(amount_cents-offset_applied_cents)/100.0 amount,reason,guard_score,refund_id,note from r`;
   else if (body.table === "customers")
-    rows = sql`select c.key,'Regular #' || upper(substr(c.key,1,4)) label,array_to_string(c.wallets,', ') wallets,c.first_seen,c.last_seen,c.status,
+    rows = sql`select c.key,'Regular #' || upper(substr(c.key,1,4)) label,array_to_string(c.wallets,', ') wallets,c.first_seen,c.last_seen,c.status::text status,
     coalesce(a.visits,0)::int visits_90d,coalesce(a.spend,0)/100.0 spend_90d,
     coalesce((c.progress_json->>'current')::numeric,0) progress_current,coalesce((c.progress_json->>'target')::numeric,${loaded?.spec.type === "VISIT_MILESTONE" ? loaded.spec.n : (loaded?.spec.spendCents ?? 0)}) progress_target,
     ${loaded?.spec.type === "VISIT_MILESTONE" ? "visits" : "spend"} progress_kind,

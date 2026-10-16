@@ -1,3 +1,4 @@
+export const metadata = { title: "Business setup" };
 import { redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/dal";
 export default async function Onboarding() {

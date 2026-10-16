@@ -6,7 +6,6 @@ import {
   enableStudioDevValidations,
   type AgStudioStateUpdatedEvent,
   type AgStudioErrorRaisedEvent,
-  type AgReportState,
   type AgPanelConfig,
   type AgStudioApi,
   type AgStudioApiReadyEvent,
@@ -14,13 +13,14 @@ import {
   type AgWidgetsConfig,
 } from "ag-studio";
 import { cockpitData } from "@/lib/studio/data";
-import { defaultState } from "@/lib/studio/default-state";
+import { restoreLayout } from "@/lib/studio/layout";
 import { analyst } from "@/lib/studio/analyst";
 import {
   cockpitWidgets,
   type KickbackRegistry,
 } from "@/lib/studio/widgets/registry";
 import { cockpitTheme } from "@/lib/studio/theme";
+import { toolDisplay } from "@/lib/studio/tool-display";
 import type { CockpitContext } from "@/lib/studio/context";
 if (process.env.NODE_ENV !== "production") enableStudioDevValidations();
 const modules = [AgStudioAiModule],
@@ -49,22 +49,25 @@ export default function StudioHost({
   const [data] = useState(() => cockpitData()),
     [business] = useState(context),
     [state] = useState(() => {
-      const template = defaultState(context),
-        saved = initialState
-          ? (structuredClone(initialState) as AgReportState<KickbackRegistry>)
-          : template;
-      // Keep the fixed KPI window and rule current when an older layout is reopened.
-      const page = saved.pages[0];
-      if (page.widgets?.rule)
-        page.widgets.rule = template.pages[0].widgets!.rule;
-      for (const id of ["paid", "cost", "visits", "held", "trend"])
-        if (page.widgets?.[id]) {
-          page.filter ??= {};
-          page.filter.widget ??= {};
-          page.filter.widget[id] = template.pages[0].filter!.widget![id];
-        }
-      return saved;
+      try {
+        return restoreLayout(initialState, context);
+      } catch {
+        return null;
+      }
     });
+  useEffect(() => {
+    if (!state) onFatal();
+  }, [state, onFatal]);
+  // Host metadata is persisted alongside Studio state, whose parser strips unknown properties.
+  const [dateWindow] = useState(() => {
+    let days = state?.kpiDays ?? 30;
+    return {
+      read: () => days,
+      write: (value: number) => {
+        days = value;
+      },
+    };
+  });
   const panels = useMemo<AgPanelConfig>(
     () => ({
       edit: {
@@ -78,12 +81,14 @@ export default function StudioHost({
     [customize, aiEnabled],
   );
   const ai = useMemo(
-    () => (aiEnabled ? analyst(business, onError) : undefined),
-    [aiEnabled, business, onError],
+    () =>
+      aiEnabled ? analyst(business, onError, dateWindow.write) : undefined,
+    [aiEnabled, business, onError, dateWindow],
   );
   const update = useCallback(
-    (e: AgStudioStateUpdatedEvent) => onState(e.state),
-    [onState],
+    (e: AgStudioStateUpdatedEvent) =>
+      onState({ ...e.state, kpiDays: dateWindow.read() }),
+    [onState, dateWindow],
   );
   const ready = useCallback(
     (event: AgStudioApiReadyEvent) => onReady(event.api),
@@ -114,6 +119,7 @@ export default function StudioHost({
       delete document.body.dataset.agThemeMode;
     };
   }, [dark]);
+  if (!state) return null;
   return (
     <AgStudioProvider
       modules={modules}
@@ -133,6 +139,7 @@ export default function StudioHost({
           context={business}
           theme={cockpitTheme}
           ai={ai}
+          aiToolDisplay={toolDisplay}
           onStateUpdated={update}
           onErrorRaised={error}
           onApiReady={ready}

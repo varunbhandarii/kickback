@@ -75,7 +75,7 @@ export const defaultProgram = {
   dailyBudgetCents: 5000,
   monthlyBudgetCents: 15000,
   settlement: "INSTANT",
-  noteTemplate: "Thanks for {n} visits, this one's on {merchant}",
+  noteTemplate: "Thanks for {n} visits: a loyalty reward from {merchant}",
 } as const;
 export function rewardNote(
   spec: ProgramSpec,
@@ -95,7 +95,8 @@ export function rewardNote(
       : undefined;
   const note = (
     kind === "WIN_BACK"
-      ? (spec.welcomeBackNote ?? "Welcome back to {merchant}. Thank you!")
+      ? (spec.welcomeBackNote ??
+        "Welcome back to {merchant}. A loyalty reward to thank you!")
       : (variant ?? spec.noteTemplate)
   )
     .replaceAll(

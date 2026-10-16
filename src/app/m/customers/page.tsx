@@ -1,3 +1,4 @@
+export const metadata = { title: "Customers" };
 import Link from "next/link";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";

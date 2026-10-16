@@ -1,3 +1,4 @@
+export const metadata = { title: "Terms of use" };
 export default function Terms() {
   return (
     <main className="mx-auto max-w-2xl p-8">

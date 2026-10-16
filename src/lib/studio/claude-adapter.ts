@@ -17,7 +17,7 @@ export function claudeAdapter(
           const res = await fetch("/api/llm/turn", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(request),
+            body: JSON.stringify({ ...request, trace: options?.trace }),
             signal: options?.signal,
           });
           if (!res.ok || !res.body)

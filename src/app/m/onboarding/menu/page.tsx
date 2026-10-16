@@ -1,3 +1,4 @@
+export const metadata = { title: "Menu and sign" };
 import { requireMerchant } from "@/lib/dal";
 import MenuForm from "./menu-form";
 export default async function MenuPage() {

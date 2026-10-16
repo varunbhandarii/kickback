@@ -41,6 +41,7 @@ Weekly suggestions require at least 20 real qualifying visits in 30 days. A leas
 Read-only analyst tools expose simulation, derived customer facts, risk flags, program metrics and design proposals. Each request validates its schema and the authenticated merchant scope. None exposes money actions.
 
 References: [Claude structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs), [adaptive thinking and model migration](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide), [pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+
 ## Analyst
 
 The Cockpit Analyst answers from the current business's Studio queries and five scoped tools: program metrics, risk flags, customer progress, rule simulation and design proposals. Customer codes are pseudonyms; hidden join keys are not names or contact data. Synthetic and replay history is labeled in results and summaries. Retrospective costs and lift assumptions are not predictions.
@@ -48,3 +49,11 @@ The Cockpit Analyst answers from the current business's Studio queries and five 
 Claude streams through a server endpoint with session/owner checks, a separate daily turn quota (default 80), cancellation and usage logging. The configured model and secret key remain server-side. A question can require multiple turns. Signed assistant tool-turn content is cached per business for up to 24 hours; recent conversations expire after 30 idle days and are capped at 20 per business.
 
 The Analyst can delegate chart layout to Studio agents. It cannot approve or decline rewards, execute refunds, contact customers, resolve disputes or activate rules. New design proposals require confirmation and use the existing design quota. When AI is disabled or unavailable, the charts, presets, deterministic Guard and ordinary merchant controls remain available.
+
+## Copy, inline results and honest measurement
+
+Newly activated thank-you notes and welcome-back copy require the literal phrase “loyalty reward”; approved existing versions are retained until the owner reviews and activates a replacement. Validation also checks business name, milestone, allowed numbers, length and prohibited promotional wording.
+
+The Analyst can read twelve monthly first-visit cohorts with cohort_metrics, set the KPI date window, and arrange custom widgets on Loyalty or Risk. Inline results show backtest figures and a bounded regular ledger. Cohorts exclude fixture-only history and label replay history. Their caption states that repeat behaviour is descriptive, not a measurement of causal program effect; recent cohorts have incomplete follow-up. A calculated holdout detection limit is informational; Kickback runs no holdout.
+
+Usage cards combine count-only browser telemetry with authoritative server token/cost records. No prompts, tool arguments or result bodies are included in that telemetry. Conversations have their separate retention lifecycle.

@@ -1,3 +1,4 @@
+import { progressLink } from "./progress-link";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { captures, customers, orders, rewards } from "@/db/schema";
@@ -66,6 +67,10 @@ export async function capturePayment(
       captureStatus: known.status,
       captureId: known.id,
       recognized: Boolean(customer),
+      progressUrl: progressLink(
+        merchant,
+        customer ? known.customerKey : undefined,
+      ),
       progress: customer?.progress as Progress | undefined,
       reward: publicReward(reward),
       rewardIds: reward?.state === "SCHEDULED" ? [reward.id] : [],
@@ -118,6 +123,10 @@ export async function capturePayment(
     captureStatus: result.captureStatus,
     captureId: result.captureId,
     recognized: result.recognized,
+    progressUrl: progressLink(
+      merchant,
+      result.recognized ? result.customerKey : undefined,
+    ),
     progress: result.recognized ? result.progress : undefined,
     reward: publicReward(result.recognized ? result.reward : undefined),
     rewardIds: result.recognized ? result.rewardIds : [],

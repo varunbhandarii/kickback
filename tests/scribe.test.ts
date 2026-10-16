@@ -93,15 +93,27 @@ describe("customer-facing copy validators", () => {
       }),
     ).toBe(false);
     expect(
-      copyValid(name + " thanks for 5 visits 😀", 120, name, spec, {
-        notes: true,
-      }),
+      copyValid(
+        name + " thanks for 5 visits: a loyalty reward 😀",
+        120,
+        name,
+        spec,
+        {
+          notes: true,
+        },
+      ),
     ).toBe(true);
     expect(
-      copyValid(name + " 5 visits free Latte", 120, name, spec, {
-        notes: true,
-        items: ["Latte"],
-      }),
+      copyValid(
+        name + " 5 visits loyalty reward: free Latte",
+        120,
+        name,
+        spec,
+        {
+          notes: true,
+          items: ["Latte"],
+        },
+      ),
     ).toBe(true);
   });
   it("validates a required spend threshold and keeps variant selection stable across retry", () => {

@@ -1,3 +1,4 @@
+import { rewardNote as rewardNoteForValidation } from "../engine/program";
 import { generateNotes } from "./scribe-notes";
 import { z } from "zod";
 import {
@@ -45,7 +46,9 @@ export function copyValid(
   if (/[^\x20-\x7e]/.test(ascii)) return false;
   if (
     options.notes &&
-    (!text.includes(merchant) || !text.includes(milestoneText(spec)))
+    (!text.includes(merchant) ||
+      !text.includes(milestoneText(spec)) ||
+      !/loyalty reward/i.test(text))
   )
     return false;
   if (options.milestone && !text.includes(milestoneText(spec))) return false;
@@ -84,12 +87,12 @@ export function copyValid(
 export function templateNotes(name: string, spec: ProgramSpec) {
   const milestone = milestoneText(spec);
   return [
-    `Thanks for ${milestone}, from ${name}.`,
-    `${name}: thanks for ${milestone}.`,
-    `${milestone} at ${name}. Thank you!`,
-    `${name} appreciates your ${milestone}.`,
-    `A thank-you from ${name} for ${milestone}.`,
-    `Cheers from ${name} for ${milestone}.`,
+    `Thanks for ${milestone}: a loyalty reward from ${name}.`,
+    `${name}: a loyalty reward for ${milestone}. Thank you!`,
+    `${milestone} at ${name}. Enjoy your loyalty reward.`,
+    `${name} thanks you for ${milestone} with a loyalty reward.`,
+    `A loyalty reward from ${name} for ${milestone}.`,
+    `Cheers from ${name}: your loyalty reward for ${milestone}.`,
   ].filter((note) => copyValid(note, 120, name, spec, { notes: true }));
 }
 export function templateCopy(name: string, spec: ProgramSpec) {
@@ -215,7 +218,21 @@ export function validateScribeSpec(
   name: string,
   items: string[] = [],
 ) {
-  if(spec.welcomeBackNote && (!spec.welcomeBackNote.includes(name) || !copyValid(spec.welcomeBackNote,120,name,spec))) throw new Error("Invalid welcome-back note");
+  if (
+    spec.welcomeBackNote &&
+    (!/loyalty reward/i.test(spec.welcomeBackNote) ||
+      !spec.welcomeBackNote.includes(name) ||
+      !copyValid(spec.welcomeBackNote, 120, name, spec))
+  )
+    throw new Error("Invalid welcome-back note");
+  if (
+    !spec.noteVariants?.length &&
+    !copyValid(rewardNoteForValidation(spec, name), 120, name, spec, {
+      notes: true,
+      items,
+    })
+  )
+    throw new Error("Thank-you notes must say loyalty reward");
   if (
     spec.noteVariants?.some(
       (n) => !copyValid(n, 120, name, spec, { notes: true, items }),

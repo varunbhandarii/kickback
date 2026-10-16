@@ -9,6 +9,8 @@ import { validateState } from "@/lib/studio/state";
 import { ruleInWords } from "@/lib/studio/context";
 import CockpitClient from "./cockpit-client";
 import { localDay } from "@/lib/engine/evaluate";
+import { measurementSentence } from "@/lib/studio/cohorts";
+export const metadata = { title: "Cockpit" };
 export default async function CockpitPage() {
   const { merchant } = await requireMerchant(),
     loaded = await loadMerchant(merchant.slug, true);
@@ -46,6 +48,7 @@ export default async function CockpitPage() {
         spec: loaded.spec,
         demo: demo.n > 0,
         model: getEnv().ANTHROPIC_MODEL,
+        measurement: await measurementSentence(merchant.id),
       }}
       initialState={state}
       invalidState={invalid}

@@ -1,3 +1,4 @@
+export const metadata = { title: "Payment sign" };
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { loadMerchant } from "@/lib/merchants";

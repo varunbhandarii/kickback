@@ -11,6 +11,15 @@ export const envSchema = z
     KICKBACK_ENV: z.enum(["sandbox", "live"]).default("sandbox"),
     DATABASE_URL: z.url(),
     APP_URL: z.url().default("http://localhost:3000"),
+    PROGRESS_LINK_TTL_DAYS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(365)
+      .default(365),
+    SENTRY_CSP_REPORT_URL: blankOptional(z.url()),
+    RENDER_API_KEY: blankOptional(),
+    WORKFLOW_SLUG: blankOptional(),
     PAYPAL_CLIENT_ID: z.string().min(1),
     PAYPAL_CLIENT_SECRET: z.string().min(1),
     PAYPAL_PARTNER_ID: blankOptional(z.string().regex(/^[A-Z0-9]{13}$/)),

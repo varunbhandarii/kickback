@@ -19,8 +19,8 @@ export async function submitProgram(
         type,
         noteTemplate:
           type === "SPEND_MILESTONE"
-            ? "Thanks for {n}, this one's on {merchant}"
-            : "Thanks for {n} visits, this one's on {merchant}",
+            ? "Thanks for {n}: a loyalty reward from {merchant}"
+            : "Thanks for {n} visits: a loyalty reward from {merchant}",
         ...(type === "VISIT_MILESTONE"
           ? { n: Number(form.get("n")) }
           : { spendCents: dollarsToCents(String(form.get("spend"))) }),

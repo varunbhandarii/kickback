@@ -540,3 +540,35 @@ export async function sweepHistory(deadline: number) {
   }
   return done;
 }
+// Workflow and cron share the same checkpoint, tenant lock and lease. A worker
+// never steals an active import from the fallback sweep.
+export async function reconcileMerchant(
+  merchantId: string,
+  deadline = Date.now() + 840000,
+) {
+  const [row] = await getDb()
+    .select({ merchant: merchants, connection: connections })
+    .from(merchants)
+    .innerJoin(connections, eq(connections.merchantId, merchants.id))
+    .where(
+      and(
+        eq(merchants.id, merchantId),
+        eq(merchants.status, "ACTIVE"),
+        eq(connections.status, "CONNECTED"),
+        isNull(merchants.purgeAfter),
+      ),
+    );
+  if (!row || !row.connection.scopes.includes(SEARCH_SCOPE))
+    return { skipped: true };
+  const run = await startBackfill(merchantId, undefined, "RECONCILE");
+  if (run.status === "FAILED")
+    throw new Error("Reconciliation needs attention");
+  if (run.status === "DONE") return { done: true };
+  const result = await runBackfill(run.id, deadline);
+  if ("error" in result)
+    throw new Error("Reconciliation failed; see merchant history status");
+  if (!result.claimed) return { busy: true };
+  if (!result.done)
+    throw new Error("Reconciliation checkpoint saved; retry required");
+  return { done: true };
+}

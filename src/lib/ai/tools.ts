@@ -9,6 +9,12 @@ import { assertOwner } from "./service";
 import { designData, prior } from "./designer/context";
 import { designInputSchema, designPipeline } from "./designer/pipeline";
 import { programMetrics } from "../guard/notices";
+import {
+  cohortQuery,
+  measurementSentence,
+  cohortCaption,
+} from "../studio/cohorts";
+import { querySchema } from "../studio/query";
 const tenant = { merchantId: z.uuid() },
   days = z.number().int().min(1).max(90);
 export const toolSchemas = {
@@ -20,6 +26,7 @@ export const toolSchemas = {
   flag_abuse: z.strictObject({ ...tenant, days }),
   program_metrics: z.strictObject({ ...tenant, days }),
   design_program: z.strictObject({ ...tenant, ...designInputSchema.shape }),
+  cohort_metrics: z.strictObject({ ...tenant }),
 };
 export const analystToolDefinitions = Object.entries(toolSchemas).map(
   ([name, schema]) => ({
@@ -44,6 +51,25 @@ export async function executeAnalystTool(
       .where(eq(merchants.id, actor.merchantId)),
     merchant = await loadMerchant(business.slug, true);
   if (!merchant || business.purgeAfter) throw new Error("BUSINESS_UNAVAILABLE");
+  if (name === "cohort_metrics")
+    return {
+      ...(await cohortQuery(
+        merchant,
+        merchant.spec.minTicketCents,
+        querySchema.parse({
+          table: "cohorts",
+          fields: [
+            "cohorts.cohort_month",
+            "cohorts.customers",
+            "cohorts.rate_60",
+            "cohorts.period",
+            "cohorts.includes_demo",
+          ],
+        }),
+      )),
+      measurement: await measurementSentence(merchant.id),
+      caption: cohortCaption,
+    };
   if (name === "program_metrics") {
     const metrics = await programMetrics(
       actor.merchantId,
@@ -122,6 +148,11 @@ export async function executeAnalystTool(
       );
     return {
       ...person,
+      ledger: completed.slice(-50).map((v) => ({
+        at: v.startedAt.toISOString(),
+        amountCents: v.amountCents,
+        source: v.source,
+      })),
       visits: completed.length,
       lastVisit: completed.at(-1)?.startedAt ?? null,
       medianGapDays: quantile(

@@ -238,7 +238,8 @@ export default function ProgramForm({
           </label>
         )}
         <label>
-          Thank-you notes (one per line; leave blank for the template)
+          Thank-you notes (one per line; include “loyalty reward”, the business
+          name and milestone; leave blank for the template)
           <textarea
             name="noteVariants"
             maxLength={1000}

@@ -1,3 +1,4 @@
+export const metadata = { title: "Business details" };
 import { requireUser, ownedMerchant } from "@/lib/dal";
 import { cookies } from "next/headers";
 import BusinessForm from "./business-form";

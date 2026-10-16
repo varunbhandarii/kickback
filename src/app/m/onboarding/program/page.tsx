@@ -1,3 +1,4 @@
+export const metadata = { title: "Review your program" };
 import { requireMerchant } from "@/lib/dal";
 import { loadMerchant } from "@/lib/merchants";
 import ProgramForm from "./program-form";

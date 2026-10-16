@@ -1,3 +1,4 @@
+export const metadata = { title: "Connect PayPal" };
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";

@@ -1,4 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/db";
@@ -18,23 +27,25 @@ import {
 beforeAll(setupDb, 30000);
 afterAll(teardownDb);
 beforeEach(resetDb);
+afterEach(() => vi.useRealTimers());
 describe("reward enqueue", () => {
   it.each(["OFFSET", "SCHEDULED", "CONFIRMED"])(
     "restores debt when an %s cycle is returned",
     async (state) => {
+      // Keep the same local-day distribution regardless of the machine's clock.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
       const merchant = await fixture(),
         { reward: original } = await milestone(merchant),
         debt = state === "OFFSET" ? 200 : 100;
-      await getDb()
-        .insert(offsets)
-        .values({
-          merchantId: merchant.id,
-          customerKey: original.customerKey,
-          sourceRewardId: original.id,
-          kind: "DEBIT",
-          amountCents: debt,
-          remainingCents: debt,
-        });
+      await getDb().insert(offsets).values({
+        merchantId: merchant.id,
+        customerKey: original.customerKey,
+        sourceRewardId: original.id,
+        kind: "DEBIT",
+        amountCents: debt,
+        remainingCents: debt,
+      });
       let last;
       for (let n = 0; n < 5; n++)
         last = await purchase(merchant, {

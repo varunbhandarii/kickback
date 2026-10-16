@@ -1,3 +1,4 @@
+import { programSentence } from "./program-sentence";
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -126,26 +127,25 @@ export async function createPayment(
     amount: {
       currency_code: "USD",
       value,
-      ...(item
-        ? { breakdown: { item_total: { currency_code: "USD", value } } }
-        : {}),
+      breakdown: { item_total: { currency_code: "USD", value } },
     },
     ...(ctx.assertionMerchantId
       ? { payee: { merchant_id: ctx.connection.merchantIdInPayPal } }
       : {}),
     custom_id: `KICKBACK:${merchant.id}:${input.requestId}`,
     description: merchant.displayName,
-    ...(item
-      ? {
-          items: [
-            {
-              name: item.name,
-              quantity: "1",
-              unit_amount: { currency_code: "USD", value },
-            },
-          ],
-        }
-      : {}),
+    items: [
+      {
+        name: (item?.name ?? `Payment to ${merchant.displayName}`).slice(
+          0,
+          127,
+        ),
+        description: programSentence(merchant.spec, merchant.displayName),
+        url: new URL(`/pay/${merchant.slug}/terms`, env.APP_URL).href,
+        quantity: "1",
+        unit_amount: { currency_code: "USD", value },
+      },
+    ],
   };
   const order = await ctx.client.request<CaptureOrder>("/v2/checkout/orders", {
     method: "POST",

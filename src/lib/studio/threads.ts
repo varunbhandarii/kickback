@@ -73,13 +73,16 @@ export async function saveThread(
     if (existing && existing.merchantId !== merchantId)
       throw new ApiError(403, "Thread unavailable");
     const { summary, ...content } = t;
-    await tx
+    const written = await tx
       .insert(cockpitThreads)
       .values({ merchantId, threadId: id, summary, messages: content })
       .onConflictDoUpdate({
         target: cockpitThreads.threadId,
         set: { summary, messages: content, updatedAt: new Date() },
-      });
+        setWhere: eq(cockpitThreads.merchantId, merchantId),
+      })
+      .returning({ id: cockpitThreads.threadId });
+    if (!written.length) throw new ApiError(403, "Thread unavailable");
     const old = await tx
       .select({ id: cockpitThreads.threadId })
       .from(cockpitThreads)

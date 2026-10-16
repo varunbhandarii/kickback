@@ -98,6 +98,9 @@ export async function purgeTenants(now = new Date()) {
         .where(eq(suggestions.merchantId, merchant.id));
       await tx.delete(designRuns).where(eq(designRuns.merchantId, merchant.id));
       await tx.delete(aiCalls).where(eq(aiCalls.merchantId, merchant.id));
+      await tx.execute(
+        sql`delete from ai_usage where merchant_id=${merchant.id}`,
+      );
       await tx.delete(notices).where(eq(notices.merchantId, merchant.id));
       await tx
         .update(programs)
@@ -211,6 +214,9 @@ export async function purgeOperationalMetadata(now = new Date()) {
   await getDb()
     .delete(aiCalls)
     .where(lt(aiCalls.createdAt, new Date(+now - 90 * 86400000)));
+  await getDb().execute(
+    sql`delete from ai_usage where finished_at<${new Date(+now - 90 * 86400000).toISOString()}::timestamptz`,
+  );
   await getDb()
     .delete(notices)
     .where(

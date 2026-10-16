@@ -1,0 +1,359 @@
+{
+  "info": {
+    "name": "Kickback",
+    "description": "Payment-linked loyalty on PayPal and Venmo. Sandbox API examples. The published environment contains placeholders only. This collection does not activate programs or approve rewards.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "PayPal sandbox",
+      "description": "Use US sandbox test accounts only. Set real credentials in local environment values or Vault, never shared values. Create an order, open its payer-action/approve URL in your browser and approve with a sandbox buyer before capture. A refund changes the test balance. Copy the returned IDs into local order_id and capture_id. Partner callers use the connected merchant_id in PayPal-Auth-Assertion. Signature verification requires the exact original webhook body and transmission headers.",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const id=pm.environment.get('client_id'), secret=pm.environment.get('client_secret');",
+              "if(!id||!secret||id.startsWith('YOUR_')||secret.startsWith('YOUR_')) throw new Error('Set sandbox credentials in local values first.');",
+              "pm.variables.set('auth_assertion', btoa(JSON.stringify({alg:'none'}))+'.'+btoa(JSON.stringify({iss:id,payer_id:pm.environment.get('merchant_id')}))+'.');",
+              "if(!pm.variables.get('access_token') || Number(pm.variables.get('token_expires')||0)<Date.now()+60000){",
+              " const res=await pm.sendRequest({url:pm.environment.get('paypal_base')+'/v1/oauth2/token',method:'POST',header:{Authorization:'Basic '+btoa(id+':'+secret),'Content-Type':'application/x-www-form-urlencoded'},body:{mode:'urlencoded',urlencoded:[{key:'grant_type',value:'client_credentials'}]}});",
+              " if(res.code!==200)throw new Error('Sandbox OAuth failed: '+res.code); const data=res.json(); pm.variables.set('access_token',data.access_token);pm.variables.set('token_expires',Date.now()+data.expires_in*1000);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "Create partner referral",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v2/customer/partner-referrals",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tracking_id\": \"kickback-example-{{$guid}}\",\n  \"operations\": [\n    {\n      \"operation\": \"API_INTEGRATION\",\n      \"api_integration_preference\": {\n        \"rest_api_integration\": {\n          \"integration_method\": \"PAYPAL\",\n          \"integration_type\": \"THIRD_PARTY\",\n          \"third_party_details\": {\n            \"features\": [\n              \"PAYMENT\",\n              \"REFUND\",\n              \"ACCESS_MERCHANT_INFORMATION\",\n              \"ADVANCED_TRANSACTIONS_SEARCH\"\n            ]\n          }\n        }\n      }\n    }\n  ],\n  \"products\": [\n    \"EXPRESS_CHECKOUT\"\n  ],\n  \"legal_consents\": [\n    {\n      \"type\": \"SHARE_DATA_CONSENT\",\n      \"granted\": true\n    }\n  ],\n  \"partner_config_override\": {\n    \"return_url\": \"{{kickback_base}}/api/paypal/referral/return\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              },
+              {
+                "key": "PayPal-Auth-Assertion",
+                "value": "{{auth_assertion}}"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v2/checkout/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"CAPTURE\",\n  \"purchase_units\": [\n    {\n      \"amount\": {\n        \"currency_code\": \"USD\",\n        \"value\": \"10.00\",\n        \"breakdown\": {\n          \"item_total\": {\n            \"currency_code\": \"USD\",\n            \"value\": \"10.00\"\n          }\n        }\n      },\n      \"payee\": {\n        \"merchant_id\": \"{{merchant_id}}\"\n      },\n      \"custom_id\": \"KICKBACK:example:{{$guid}}\",\n      \"items\": [\n        {\n          \"name\": \"Sandbox cafe purchase\",\n          \"description\": \"Every 5 qualifying visits within 60 days earns a $2 loyalty reward as a partial refund. Limits apply. Terms at the link.\",\n          \"url\": \"{{kickback_base}}/pay/{{slug}}/terms\",\n          \"quantity\": \"1\",\n          \"unit_amount\": {\n            \"currency_code\": \"USD\",\n            \"value\": \"10.00\"\n          }\n        }\n      ]\n    }\n  ],\n  \"payment_source\": {\n    \"paypal\": {\n      \"experience_context\": {\n        \"shipping_preference\": \"NO_SHIPPING\",\n        \"user_action\": \"PAY_NOW\",\n        \"return_url\": \"{{kickback_base}}/pay/{{slug}}\",\n        \"cancel_url\": \"{{kickback_base}}/pay/{{slug}}\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Read approved order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              },
+              {
+                "key": "PayPal-Auth-Assertion",
+                "value": "{{auth_assertion}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v2/checkout/orders/{{order_id}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Capture approved order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              },
+              {
+                "key": "PayPal-Auth-Assertion",
+                "value": "{{auth_assertion}}"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v2/checkout/orders/{{order_id}}/capture",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Partial refund with loyalty note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              },
+              {
+                "key": "PayPal-Auth-Assertion",
+                "value": "{{auth_assertion}}"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v2/payments/captures/{{capture_id}}/refund",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": {\n    \"currency_code\": \"USD\",\n    \"value\": \"2.00\"\n  },\n  \"note_to_payer\": \"Thanks for 5 visits: a loyalty reward from Rosa's Cafe.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Transaction Search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              },
+              {
+                "key": "PayPal-Auth-Assertion",
+                "value": "{{auth_assertion}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v1/reporting/transactions?start_date={{start_date}}&end_date={{end_date}}&fields=all&page_size=100&page=1"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify original webhook signature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "PayPal-Partner-Attribution-Id",
+                "value": "{{bn_code}}"
+              }
+            ],
+            "url": "{{paypal_base}}/v1/notifications/verify-webhook-signature",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auth_algo\": \"{{paypal_auth_algo}}\",\n  \"cert_url\": \"{{paypal_cert_url}}\",\n  \"transmission_id\": \"{{paypal_transmission_id}}\",\n  \"transmission_sig\": \"{{paypal_transmission_sig}}\",\n  \"transmission_time\": \"{{paypal_transmission_time}}\",\n  \"webhook_id\": \"{{webhook_id}}\",\n  \"webhook_event\": {\n    \"id\": \"REPLACE_WITH_EXACT_ORIGINAL_EVENT\",\n    \"event_type\": \"PAYMENT.CAPTURE.COMPLETED\",\n    \"resource\": {\n      \"id\": \"REPLACE_WITH_CAPTURE_ID\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Kickback",
+      "description": "Sign in at {{kickback_base}}/sign-in, select a business, then paste the complete Cookie request-header value into the LOCAL kickback_session variable. Include the session and kickback.merchant cookies. Never publish cookies. Protected queries require an owner session. API results use pseudonymous codes; no payer contact list.",
+      "item": [
+        {
+          "name": "Deep health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{kickback_base}}/api/health?deep=1"
+          },
+          "response": []
+        },
+        {
+          "name": "Checkout QR",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{kickback_base}}/api/pay/{{slug}}/qr.png"
+          },
+          "response": []
+        },
+        {
+          "name": "Scoped visit summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{kickback_session}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{kickback_base}}"
+              }
+            ],
+            "url": "{{kickback_base}}/api/studio/query",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"table\": \"daily_summary\",\n  \"fields\": [\n    \"daily_summary.day\",\n    \"daily_summary.visits\",\n    \"daily_summary.reward_cost\"\n  ],\n  \"options\": {\n    \"paging\": {\n      \"pageLimit\": 7\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Program metrics",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{kickback_session}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{kickback_base}}"
+              }
+            ],
+            "url": "{{kickback_base}}/api/analyst/program_metrics",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"days\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

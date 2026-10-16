@@ -3,8 +3,31 @@ import { z } from "zod";
 import { sourceFields, type StudioTable } from "./sources";
 import { localDay } from "../engine/evaluate";
 export class QueryError extends Error {}
+export function isIsoDate(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/.test(
+      value,
+    )
+  )
+    return false;
+  const day = value.slice(0, 10),
+    date = new Date(day + "T00:00:00Z");
+  return (
+    Number.isFinite(+date) &&
+    date.toISOString().slice(0, 10) === day &&
+    Number.isFinite(Date.parse(value))
+  );
+}
 export const querySchema = z.strictObject({
-  table: z.enum(["customers", "visits", "rewards", "daily_summary"]),
+  table: z.enum([
+    "customers",
+    "visits",
+    "rewards",
+    "daily_summary",
+    "ai_usage",
+    "cohorts",
+  ]),
   fields: z.array(z.string()).min(1).max(40),
   options: z
     .object({
@@ -155,8 +178,8 @@ export function whereFrom(
       f.conditions.length > 50
     )
       throw new QueryError("Invalid logical filter");
-    const parts = f.conditions.map(
-      (c) => whereFrom(c, table, tz, now, depth + 1)!,
+    const parts = f.conditions.map((c) =>
+      whereFrom(c, table, tz, now, depth + 1)!,
     );
     const body = sql`(${sql.join(parts, f.operator === "OR" ? sql` or ` : sql` and `)})`;
     return f.operator === "NOT" ? sql`not ${body}` : body;
@@ -180,10 +203,7 @@ export function whereFrom(
       throw new QueryError("Expected number");
     if (kind === "boolean" && typeof x !== "boolean")
       throw new QueryError("Expected boolean");
-    if (
-      ["date", "datetime"].includes(kind) &&
-      (typeof x !== "string" || !Number.isFinite(Date.parse(x)))
-    )
+    if (["date", "datetime"].includes(kind) && !isIsoDate(x))
       throw new QueryError("Expected date");
     return x;
   };
@@ -277,9 +297,11 @@ export function querySuffix(
       "." +
       (body.table === "customers"
         ? "key"
-        : body.table === "daily_summary"
+        : ["daily_summary", "ai_usage"].includes(body.table)
           ? "day"
-          : "id"),
+          : body.table === "cohorts"
+            ? "cohort_month"
+            : "id"),
     body.table,
   );
   return sql`select ${sql.join(fields, sql`, `)} from rows ${filter ? sql`where ${filter}` : sql``} order by ${sorts?.length ? sql`${sql.join(sorts, sql`, `)}, ` : sql``}${stable} limit ${Math.min(500, body.options?.paging?.pageLimit ?? 500)} offset ${body.options?.paging?.offset ?? 0}`;

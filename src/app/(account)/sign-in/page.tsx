@@ -1,3 +1,4 @@
+export const metadata = { title: "Sign in" };
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/dal";

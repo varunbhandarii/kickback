@@ -5,6 +5,7 @@ import { rewards, visits, rewardState, guardFlags } from "@/db/schema";
 import ReviewControls from "./review-controls";
 import { explainReview } from "./actions";
 import { requireMerchant } from "@/lib/dal";
+export const metadata = { title: "Rewards" };
 export default async function RewardsPage({
   searchParams,
 }: {
@@ -37,6 +38,21 @@ export default async function RewardsPage({
   return (
     <>
       <h1>Rewards</h1>
+      <form action="/api/m/rewards.csv" method="get" className="filter-form">
+        <label>
+          Tax year{" "}
+          <input
+            name="year"
+            type="number"
+            min={2020}
+            max={new Date().getUTCFullYear()}
+            defaultValue={new Date().getUTCFullYear()}
+            required
+          />
+        </label>
+        <button className="secondary">Download rewards CSV</button>
+        <Link href="/m/help">Reports & tax help</Link>
+      </form>
       <form method="get" className="filter-form">
         <label>
           State

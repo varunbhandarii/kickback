@@ -457,6 +457,11 @@ export const aiCalls = pgTable(
       .notNull()
       .references(() => merchants.id),
     feature: text("feature").notNull(),
+    threadId: text("thread_id"),
+    runId: text("run_id"),
+    parentRunId: text("parent_run_id"),
+    agentId: text("agent_id"),
+    turnIndex: integer("turn_index"),
     model: text("model").notNull(),
     operationId: uuid("operation_id"),
     status: text("status").notNull().default("STARTED"),
@@ -468,7 +473,10 @@ export const aiCalls = pgTable(
     requestId: text("request_id"),
     createdAt: at("created_at").notNull().defaultNow(),
   },
-  (t) => [index("ai_calls_quota_idx").on(t.merchantId, t.createdAt)],
+  (t) => [
+    index("ai_calls_quota_idx").on(t.merchantId, t.createdAt),
+    index("ai_calls_run_idx").on(t.merchantId, t.runId),
+  ],
 );
 export const designRuns = pgTable("design_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -594,4 +602,29 @@ export const digests = pgTable(
     readAt: at("read_at"),
   },
   (t) => [uniqueIndex("digests_week_idx").on(t.merchantId, t.weekStart)],
+);
+
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    merchantId: uuid("merchant_id")
+      .notNull()
+      .references(() => merchants.id),
+    runId: text("run_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    parentRunId: text("parent_run_id"),
+    agentId: text("agent_id").notNull(),
+    startedAt: at("started_at").notNull(),
+    finishedAt: at("finished_at").notNull(),
+    status: text("status").notNull(),
+    model: text("model"),
+    turns: integer("turns").notNull(),
+    toolCalls: integer("tool_calls").notNull(),
+    toolErrors: integer("tool_errors").notNull(),
+    firstItemMs: integer("first_item_ms"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.merchantId, t.runId] }),
+    index("ai_usage_retention_idx").on(t.finishedAt),
+  ],
 );

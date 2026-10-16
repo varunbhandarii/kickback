@@ -1,3 +1,4 @@
+export const metadata = { title: "Program terms" };
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadMerchant } from "@/lib/merchants";
@@ -23,7 +24,26 @@ export default async function ProgramTerms({
         </p>
       )}
       <div className="terms-copy">
-        {s.winBack&&<p>Welcome-back reward: after at least {s.winBack.minVisits} earlier qualifying visits, a qualifying return visit following a gap of at least {s.winBack.gapDays} calendar days can earn {money(s.winBack.rewardCents)} back. Limited to once per customer per 180 calendar days. A regular milestone takes precedence on the same visit. The same budgets, caps and eligibility rules apply; imported past visits never trigger a retroactive welcome-back refund.</p>}
+        <h2 id="why-refund">Why did I get a refund?</h2>
+        <p>
+          A small partial refund can be your earned loyalty reward from{" "}
+          {merchant.displayName}. It is a loyalty reward, not an error and not a
+          return. You do not need to buy anything extra or take action to
+          receive it. We do not adjust sales tax or fees on the original
+          purchase. Contact the merchant if you do not recognize it.
+        </p>
+        {s.winBack && (
+          <p>
+            Welcome-back reward: after at least {s.winBack.minVisits} earlier
+            qualifying visits, a qualifying return visit following a gap of at
+            least {s.winBack.gapDays} calendar days can earn{" "}
+            {money(s.winBack.rewardCents)} back. Limited to once per customer
+            per 180 calendar days. A regular milestone takes precedence on the
+            same visit. The same budgets, caps and eligibility rules apply;
+            imported past visits never trigger a retroactive welcome-back
+            refund.
+          </p>
+        )}
         {s.termsIntro && <p>{s.termsIntro}</p>}
         <p>
           Earn {money(s.rewardCents)} back after{" "}

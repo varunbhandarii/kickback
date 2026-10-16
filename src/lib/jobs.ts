@@ -10,6 +10,7 @@ import { sendOperationalNotices } from "./email";
 import { refreshNotices } from "./guard/notices";
 import { weeklySuggestions } from "./ai/weekly";
 import { weeklyDigests } from "./digests";
+import { triggerReconcile } from "./workflow-trigger";
 export async function runJobs() {
   const started = Date.now(),
     deadline = started + 45000;
@@ -19,6 +20,15 @@ export async function runJobs() {
     Date.now() < deadline - 5000 ? await settleDue(25, deadline) : 0;
   const confirmed =
     Date.now() < deadline - 5000 ? await confirmSent(deadline) : 0;
+  if (Date.now() < deadline - 5000) {
+    try {
+      await triggerReconcile();
+    } catch {
+      console.warn(
+        JSON.stringify({ action: "workflow_trigger_failed", fallback: "cron" }),
+      );
+    }
+  }
   const history =
     Date.now() < deadline - 5000 ? await sweepHistory(deadline) : 0;
   const tenantsPurged = await purgeTenants();

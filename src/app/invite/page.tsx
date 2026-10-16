@@ -1,3 +1,4 @@
+export const metadata = { title: "Accept invitation" };
 import Link from "next/link";
 import { getSession } from "@/lib/dal";
 import InviteForm from "./invite-form";

@@ -85,6 +85,13 @@
       "when": 1792039700000,
       "tag": "0011_welcome_back",
       "breakpoints": true
+    },
+    {
+      "when": 1792079000000,
+      "version": "7",
+      "idx": 12,
+      "tag": "0012_analyst_usage",
+      "breakpoints": true
     }
   ]
 }

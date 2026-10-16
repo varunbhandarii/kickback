@@ -150,7 +150,7 @@ export async function activateProgram(
     if (importing)
       throw new Error("Wait for history to finish before activating");
     if (spec.winBack && !spec.welcomeBackNote)
-      spec.welcomeBackNote = `Welcome back to ${merchant.displayName}. Thank you!`;
+      spec.welcomeBackNote = `Welcome back to ${merchant.displayName}. A loyalty reward to thank you!`;
     rewardNote(spec, merchant.displayName);
     validateScribeSpec(
       spec,

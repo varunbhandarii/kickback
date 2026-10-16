@@ -1,3 +1,4 @@
+export const metadata = { title: "Import payment history" };
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { backfillRuns, connections } from "@/db/schema";

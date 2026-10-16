@@ -100,7 +100,7 @@ describe("stored design approval and analyst scope", () => {
     const merchant = await fixture(),
       actor = await owner(merchant.id),
       other = await fixture(undefined, "other");
-    expect(analystToolDefinitions).toHaveLength(5);
+    expect(analystToolDefinitions).toHaveLength(6);
     expect(
       analystToolDefinitions.every(
         (t) =>

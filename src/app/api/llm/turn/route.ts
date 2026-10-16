@@ -23,6 +23,9 @@ import { getEnv } from "@/lib/env";
 import { encodeInput, toClaudeSchema } from "@/lib/studio/llm/encode";
 import { cachedTurn, saveTurn } from "@/lib/studio/llm/cache";
 import { eventMapper, finalResponse } from "@/lib/studio/llm/events";
+import { getDb } from "@/db";
+import { aiCalls } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 export const runtime = "nodejs";
 const itemSchema = z.discriminatedUnion("type", [
   z
@@ -44,7 +47,17 @@ const itemSchema = z.discriminatedUnion("type", [
       id: z.string(),
       callId: z.string().max(200),
       name: z.string().max(128),
-      arguments: z.string().max(200000),
+      arguments: z
+        .string()
+        .max(200000)
+        .refine((s) => {
+          try {
+            JSON.parse(s || "{}");
+            return true;
+          } catch {
+            return false;
+          }
+        }, "Tool arguments must be JSON"),
     })
     .passthrough(),
   z
@@ -57,6 +70,18 @@ const itemSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("reasoning") }).passthrough(),
 ]);
 const requestSchema = z.object({
+  trace: z
+    .object({
+      threadId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
+      runId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
+      parentRunId: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{1,160}$/)
+        .optional(),
+      agentId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
+      turnIndex: z.number().int().min(0).max(1000).optional(),
+    })
+    .optional(),
   input: z.array(itemSchema).min(1).max(200),
   instructions: z.string().max(100000).optional(),
   tools: z
@@ -128,6 +153,16 @@ export async function POST(req: Request) {
         try {
           const row = await reserveAiCall(actor.merchantId, "analyst");
           id = row.id;
+          if (parsed.data.trace)
+            await getDb()
+              .update(aiCalls)
+              .set(parsed.data.trace)
+              .where(
+                and(
+                  eq(aiCalls.id, id),
+                  eq(aiCalls.merchantId, actor.merchantId),
+                ),
+              );
           const { messages, system } = await encodeInput(body.input, (id) =>
             cachedTurn(actor.merchantId, id),
           );

@@ -32,36 +32,36 @@ To enable PayPal sign-in, configure Log in with PayPal on the platform app with 
 
 ## Environment
 
-| Variable | Purpose |
-| --- | --- |
-| `KICKBACK_ENV` | `sandbox`; live rejects demo tools and signature bypass |
-| `DATABASE_URL`, `POSTGRES_PORT` | Database connection/local port (55432) |
-| `APP_URL` | Browser origin, QR links, return URLs |
-| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Platform app credentials |
-| `PAYPAL_PARTNER_ID`, `PAYPAL_BN_CODE`, `PAYPAL_WEBHOOK_ID` | Platform merchant ID, attribution, registered listener |
-| `MERCHANT_{ROSAS,SALON,BAKERY}_ID` | Sandbox merchant IDs for seed |
-| `PAYPAL_CONNECTION_MODE` | `partner` or `byo` |
-| `MERCHANT_{ROSAS,SALON,BAKERY}_CONNECTION_MODE` | Per-merchant mode override |
-| `MERCHANT_{ROSAS,SALON,BAKERY}_CLIENT_ID`, `..._CLIENT_SECRET` | BYO credentials; secret encrypted in DB |
-| `MERCHANT_{ROSAS,SALON,BAKERY}_WEBHOOK_ID` | Optional merchant-owned listener registration, including partner mode |
-| `KICKBACK_MASTER_KEY` | 32 random bytes in standard Base64; identity, encryption, tokens |
-| `JOBS_BEARER` | At least 32 characters for operator APIs |
-| `PG_POOL_MAX` | Web 5; cron 2 |
-| `PAYPAL_RATE_PER_MIN` | 1–40, default 40; burst 10, per process |
-| `KICKBACK_PAUSE_REWARDS` | Global environment kill switch |
-| `REWARD_SETTLE_IMMEDIATE` | Default true; false leaves refunds to the sweep |
-| `DEMO_MODE` | Enables sandbox tools; ordinary pay routes stay available |
-| `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS` | Local simulator override only; false hosted |
-| `PAYPAL_DEMO_VAULT_ID`, `MERCHANT_{ROSAS,SALON,BAKERY}_VAULT_ID` | Private saved sandbox wallet tokens |
-| `REMOTE_JOBS_BEARER` | Hosted key for remote replay when different from local |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Optional AI configuration |
-| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Authentication encryption/signing key and public origin; URL defaults to APP_URL |
-| `DEMO_USER_PASSWORD` | Required sandbox seed password; never printed or rotated by reseeding |
-| `PAYPAL_LOGIN_ENABLED` | Exposes PayPal merchant sign-in after provider configuration |
-| `RESEND_API_KEY`, `EMAIL_FROM` | Optional verified sender for merchant authentication/operational email |
-| `TENANT_PURGE_HOURS` | Default 48; a shorter value is sandbox-only for isolated deletion checks |
-| `RECONCILE_INTERVAL_HOURS`, `BACKFILL_DAYS` | Default 6-hour reconciliation and 90-day history |
-| `NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY` | Applicable Studio deployment license |
+| Variable                                                         | Purpose                                                                          |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `KICKBACK_ENV`                                                   | `sandbox`; live rejects demo tools and signature bypass                          |
+| `DATABASE_URL`, `POSTGRES_PORT`                                  | Database connection/local port (55432)                                           |
+| `APP_URL`                                                        | Browser origin, QR links, return URLs                                            |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`                       | Platform app credentials                                                         |
+| `PAYPAL_PARTNER_ID`, `PAYPAL_BN_CODE`, `PAYPAL_WEBHOOK_ID`       | Platform merchant ID, attribution, registered listener                           |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_ID`                               | Sandbox merchant IDs for seed                                                    |
+| `PAYPAL_CONNECTION_MODE`                                         | `partner` or `byo`                                                               |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_CONNECTION_MODE`                  | Per-merchant mode override                                                       |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_CLIENT_ID`, `..._CLIENT_SECRET`   | BYO credentials; secret encrypted in DB                                          |
+| `MERCHANT_{ROSAS,SALON,BAKERY}_WEBHOOK_ID`                       | Optional merchant-owned listener registration, including partner mode            |
+| `KICKBACK_MASTER_KEY`                                            | 32 random bytes in standard Base64; identity, encryption, tokens                 |
+| `JOBS_BEARER`                                                    | At least 32 characters for operator APIs                                         |
+| `PG_POOL_MAX`                                                    | Web 5; cron 2                                                                    |
+| `PAYPAL_RATE_PER_MIN`                                            | 1–40, default 40; burst 10, per process                                          |
+| `KICKBACK_PAUSE_REWARDS`                                         | Global environment kill switch                                                   |
+| `REWARD_SETTLE_IMMEDIATE`                                        | Default true; false leaves refunds to the sweep                                  |
+| `DEMO_MODE`                                                      | Enables sandbox tools; ordinary pay routes stay available                        |
+| `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS`                             | Local simulator override only; false hosted                                      |
+| `PAYPAL_DEMO_VAULT_ID`, `MERCHANT_{ROSAS,SALON,BAKERY}_VAULT_ID` | Private saved sandbox wallet tokens                                              |
+| `REMOTE_JOBS_BEARER`                                             | Hosted key for remote replay when different from local                           |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`                           | Optional AI configuration                                                        |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`                          | Authentication encryption/signing key and public origin; URL defaults to APP_URL |
+| `DEMO_USER_PASSWORD`                                             | Required sandbox seed password; never printed or rotated by reseeding            |
+| `PAYPAL_LOGIN_ENABLED`                                           | Exposes PayPal merchant sign-in after provider configuration                     |
+| `RESEND_API_KEY`, `EMAIL_FROM`                                   | Optional verified sender for merchant authentication/operational email           |
+| `TENANT_PURGE_HOURS`                                             | Default 48; a shorter value is sandbox-only for isolated deletion checks         |
+| `RECONCILE_INTERVAL_HOURS`, `BACKFILL_DAYS`                      | Default 6-hour reconciliation and 90-day history                                 |
+| `NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY`                              | Applicable Studio deployment license                                             |
 
 ## PayPal setup
 
@@ -114,3 +114,13 @@ npm run check:ledger
 ```
 
 PGlite runs database unit tests; the concurrency and ledger checks use real Postgres. The ledger check exercises timestamp encoding, merging, and enqueue without provider calls. Before live use, establish provider approval, retention/consent decisions, and applicable deployment licenses. The current demo is sandbox-only.
+
+## Progress, reporting and workflow configuration
+
+PROGRESS_LINK_TTL_DAYS defaults to 365 and can be reduced. Signed progress links reveal a limited private summary; treat them as bearer credentials.
+
+SENTRY_CSP_REPORT_URL is the optional HTTPS Security Header report URI from the Sentry project's Client Keys/Security Headers settings, not its SDK DSN. Configure it for the web build and redeploy. The app publishes a report-only policy and relays sanitized reports through /api/security/csp; query strings and snippets are stripped. Do not enforce the policy until browser reports have been reviewed.
+
+The Blueprint defines an optional kickback-workflows service with the existing environment group, a two-connection Postgres pool, and the same region/database. Workflow registration has no migration command. RENDER_API_KEY is a user-scoped Render API key used only by the web/cron task triggers; WORKFLOW_SLUG is the deployed workflow slug. Leave either unset to skip the trigger and retain cron recovery. Keep the API key out of shared public files and review/rotate it after evaluation access ends. POST /api/admin/jobs/workflow requires the job bearer and uses the same UTC-day idempotency key as cron.
+
+Import the examples in postman/ into a public workspace only after checking that every shared value is a placeholder. Real credentials and session cookies stay local. See postman/README.md.

@@ -6,6 +6,14 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { connections } from "@/db/schema";
 export const dynamic = "force-dynamic";
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const m = await loadMerchant((await params).slug);
+  return { title: m ? `Pay ${m.displayName}` : "Pay" };
+}
 export default async function PayPage({
   params,
 }: {

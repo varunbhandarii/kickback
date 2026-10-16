@@ -51,6 +51,7 @@ export default function CockpitClient({
     [recovered, setRecovered] = useState(invalidState),
     [message, setMessage] = useState(""),
     [darkOverride, setDark] = useState<boolean | null>(null);
+  const [pageId, setPageId] = useState("loyalty");
   const dark = darkOverride ?? preferredDark;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     studio = useRef<AgStudioApi | undefined>(undefined),
@@ -59,9 +60,11 @@ export default function CockpitClient({
   useEffect(() => () => clearTimeout(timer.current), []);
   const ready = useCallback((api: AgStudioApi) => {
     studio.current = api;
+    setPageId(api.getState().selectedPageId);
   }, []);
   const fatal = useCallback(() => setFailed(true), []);
   const persist = useCallback((next: unknown) => {
+    setPageId((next as { selectedPageId: string }).selectedPageId);
     latest.current = next;
     clearTimeout(timer.current);
     setMessage("Saving layout…");
@@ -124,6 +127,46 @@ export default function CockpitClient({
         </button>
         <Link href="/m">Overview</Link>
       </div>
+      <div
+        role="tablist"
+        aria-label="Cockpit pages"
+        className="cockpit-toolbar"
+      >
+        {(["loyalty", "risk"] as const).map((id) => (
+          <button
+            key={id}
+            role="tab"
+            id={`cockpit-tab-${id}`}
+            aria-controls="cockpit-panel"
+            aria-selected={pageId === id}
+            tabIndex={pageId === id ? 0 : -1}
+            onKeyDown={(e) => {
+              if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+                e.preventDefault();
+                const next =
+                  e.key === "Home"
+                    ? "loyalty"
+                    : e.key === "End"
+                      ? "risk"
+                      : id === "loyalty"
+                        ? "risk"
+                        : "loyalty";
+                studio.current?.setState({
+                  ...studio.current.getState(),
+                  selectedPageId: next,
+                });
+                document.getElementById(`cockpit-tab-${next}`)?.focus();
+              }
+            }}
+            onClick={() => {
+              const api = studio.current;
+              if (api) api.setState({ ...api.getState(), selectedPageId: id });
+            }}
+          >
+            {id === "loyalty" ? "Loyalty" : "Risk"}
+          </button>
+        ))}
+      </div>
       {!ai && (
         <p>
           Analyst unavailable in this deployment. Your charts and tables still
@@ -149,18 +192,24 @@ export default function CockpitClient({
           <button onClick={() => void reset()}>Reset layout</button>
         </div>
       ) : (
-        <StudioHost
-          key={generation}
-          context={context}
-          initialState={state}
-          customize={custom}
-          aiEnabled={ai}
-          dark={dark}
-          onState={persist}
-          onFatal={fatal}
-          onError={setMessage}
-          onReady={ready}
-        />
+        <div
+          role="tabpanel"
+          id="cockpit-panel"
+          aria-labelledby={`cockpit-tab-${pageId}`}
+        >
+          <StudioHost
+            key={generation}
+            context={context}
+            initialState={state}
+            customize={custom}
+            aiEnabled={ai}
+            dark={dark}
+            onState={persist}
+            onFatal={fatal}
+            onError={setMessage}
+            onReady={ready}
+          />
+        </div>
       )}
     </section>
   );

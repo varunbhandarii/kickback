@@ -1,3 +1,4 @@
+export const metadata = { title: "Verify email" };
 import Link from "next/link";
 import { requireUser } from "@/lib/dal";
 import { emailConfigured } from "@/lib/email";

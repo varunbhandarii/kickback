@@ -39,7 +39,7 @@ describe("Welcome-back outbox", () => {
       amountCents: 100,
       tier: "INSTANT",
       state: "SCHEDULED",
-      note: "Welcome back to Rosa's Cafe. Thank you!",
+      note: "Welcome back to Rosa's Cafe. A loyalty reward to thank you!",
     });
     await purchase(merchant, { at: at(34) });
     expect(await getDb().select().from(rewards)).toHaveLength(1);
@@ -55,6 +55,36 @@ const run = (rows: VisitView[], s = spec) =>
     rewardableFrom: at(1),
   });
 describe("Welcome-back rewards", () => {
+  it("measures inactivity from a completed low-ticket visit", () => {
+    const r = run([
+      visit(1),
+      visit(2),
+      visit(3),
+      { ...visit(25), amountCents: 100 },
+      visit(33),
+    ]);
+    expect(r.intents).toHaveLength(0);
+  });
+  it("consumes a milestone reached on an existing welcome-back visit", () => {
+    const r = evaluate(
+      { ...spec, n: 4 },
+      [visit(1), visit(2), visit(3), visit(33), visit(34)],
+      [
+        {
+          visitId: "33",
+          state: "HELD",
+          kind: "WIN_BACK",
+          amountCents: 100,
+          createdAt: at(33),
+        },
+      ],
+      budget,
+      at(34),
+      "UTC",
+    );
+    expect(r.intents).toHaveLength(0);
+    expect(r.progress.current).toBe(1);
+  });
   it("fires at the gap boundary", () => {
     expect(
       run([visit(1), visit(2), visit(3), visit(33)]).intents,
@@ -148,6 +178,6 @@ describe("Welcome-back rewards", () => {
     ).toThrow());
   it("uses a bounded welcome-back thank-you", () =>
     expect(rewardNote(spec, "Rosa's Cafe", "reward", "WIN_BACK")).toBe(
-      "Welcome back to Rosa's Cafe. Thank you!",
+      "Welcome back to Rosa's Cafe. A loyalty reward to thank you!",
     ));
 });

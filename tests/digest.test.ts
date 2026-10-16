@@ -4,6 +4,26 @@ import { digests } from "@/db/schema";
 import { digestWeek, digestFacts, weeklyDigests } from "@/lib/digests";
 import { fixture, setupDb, resetDb, teardownDb } from "./helpers/db";
 describe("Weekly digest calendar and facts", () => {
+  it("does not recount a long-standing regular after bounded history is loaded", () => {
+    const from = new Date("2026-10-12"),
+      now = new Date("2026-10-18");
+    const history = [
+      {
+        customerKey: "old",
+        startedAt: new Date("2026-10-13"),
+        source: "PAY_PAGE",
+      },
+      {
+        customerKey: "old",
+        startedAt: new Date("2026-10-15"),
+        source: "PAY_PAGE",
+      },
+    ];
+    expect(
+      digestFacts(history, [], from, now, "UTC", new Map([["old", 2]]))
+        .newRegulars,
+    ).toBe(0);
+  });
   it("waits until Sunday18:00 in the merchant zone", () => {
     expect(
       digestWeek(new Date("2026-10-18T21:59Z"), "America/New_York").due,

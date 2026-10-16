@@ -1,3 +1,4 @@
+export const metadata = { title: "Welcome" };
 import Link from "next/link";
 export default function Home() {
   return (
@@ -12,6 +13,11 @@ export default function Home() {
       </h1>
       <p className="mt-6 max-w-xl text-xl text-slate-600">
         Payment-linked loyalty for small merchants on PayPal and Venmo.
+      </p>
+      <p className="mt-8 flex flex-wrap gap-5">
+        Free while Kickback runs in PayPal sandbox. No contract, no hardware, no
+        customer app. Pricing for live merchants will be announced before
+        launch.
       </p>
       <p className="mt-8 flex flex-wrap gap-5">
         <Link

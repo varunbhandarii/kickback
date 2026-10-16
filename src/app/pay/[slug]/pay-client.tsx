@@ -1,19 +1,35 @@
 "use client";
 import Script from "next/script";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ProgramSpec } from "@/lib/engine/program";
 import type { Progress } from "@/lib/engine/evaluate";
 import type { MenuItem } from "@/db/schema";
 import type {} from "@/app/dev/pay-test/pay-test";
-type Reward = { id: string; token: string; state: string; amountCents: number; kind?:string };
+type Reward = {
+  id: string;
+  token: string;
+  state: string;
+  amountCents: number;
+  kind?: string;
+};
 type Result = {
   captureStatus: string;
   recognized: boolean;
   progress?: Progress;
   reward?: Reward;
+  progressUrl?: string;
 };
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const shareSubscribe = () => () => {},
+  shareSnapshot = () => typeof navigator.share === "function",
+  noShare = () => false;
 export default function PayClient({
   slug,
   name,
@@ -44,6 +60,8 @@ export default function PayClient({
   const [retry, setRetry] = useState<string>(),
     buttons = useRef<HTMLDivElement>(null),
     busyRef = useRef(false);
+  const [linkStatus, setLinkStatus] = useState("");
+  const canShare = useSyncExternalStore(shareSubscribe, shareSnapshot, noShare);
   const selection = useRef({ item, amount });
   useEffect(() => {
     selection.current = { item, amount };
@@ -373,7 +391,7 @@ export default function PayClient({
                     ? "This reward is no longer eligible. See the program terms."
                     : ["FAILED", "HELD", "DEFERRED"].includes(reward.state)
                       ? "Your reward needs a check. Please contact the merchant."
-                        : `${reward.kind === "WIN_BACK" ? "Welcome back — " : ""}${money(reward.amountCents)} is on its way back to your wallet.`}
+                      : `${reward.kind === "WIN_BACK" ? "Welcome back — " : ""}${money(reward.amountCents)} is on its way back to your wallet.`}
             </p>
           ) : progress?.blocked ? (
             <p>
@@ -387,9 +405,55 @@ export default function PayClient({
                     ? `Visit ${progress.current} of ${progress.target} — ${progress.target - progress.current} more for ${money(progress.rewardCents)} back`
                     : `${money(progress.current)} of ${money(progress.target)} — ${money(progress.target - progress.current)} more for ${money(progress.rewardCents)} back`}
                 </p>
-                <progress max={progress.target} value={progress.current} />
+                <progress
+                  aria-label="Reward progress"
+                  max={progress.target}
+                  value={progress.current}
+                />
               </>
             )
+          )}
+          {result.recognized && result.progressUrl && (
+            <div>
+              <p>
+                <a href={result.progressUrl}>
+                  Save this link to check your visits
+                </a>
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(result.progressUrl!);
+                    setLinkStatus("Link copied");
+                  } catch {
+                    setLinkStatus("Open the link above and bookmark it.");
+                  }
+                }}
+              >
+                Copy link
+              </button>
+              {canShare && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator
+                      .share({
+                        title: `Your visits at ${name}`,
+                        url: result.progressUrl,
+                      })
+                      .catch(() => {});
+                  }}
+                >
+                  Share link
+                </button>
+              )}
+              <p role="status">{linkStatus}</p>
+              <p>
+                Keep this link private. On your phone, use your browser menu to
+                add it to your Home Screen.
+              </p>
+            </div>
           )}
         </section>
       )}
@@ -399,7 +463,10 @@ export default function PayClient({
           within {spec.mergeWindowMin} minutes count as one visit.
         </p>
         <Link href={`/pay/${slug}/terms`}>Program terms</Link> ·{" "}
-        <Link href="/privacy">Privacy</Link>
+        <Link href={`/pay/${slug}/terms#why-refund`}>
+          Why did I get a refund?
+        </Link>{" "}
+        · <Link href="/privacy">Privacy</Link>
         {sandbox && (
           <p>Use sandbox accounts only. Test balances have no real value.</p>
         )}

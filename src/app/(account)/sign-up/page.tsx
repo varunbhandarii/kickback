@@ -1,3 +1,4 @@
+export const metadata = { title: "Create account" };
 import Link from "next/link";
 import AccountForm from "../account-form";
 export default function SignUp() {

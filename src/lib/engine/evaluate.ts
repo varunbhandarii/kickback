@@ -73,6 +73,7 @@ export function evaluate(
     .filter((r) => r.kind === "WIN_BACK" || r.reason === "WIN_BACK")
     .map((r) => r.createdAt);
   let priorCompleted: VisitView[] = [];
+  let lastCompleted: VisitView | undefined;
   const intents: {
     visitId: string;
     amountCents: number;
@@ -99,6 +100,8 @@ export function evaluate(
   for (const visit of qualifying) {
     // A consumed cycle remains a boundary when an earlier purchase is returned.
     const before = priorCompleted;
+    const previousCompleted = lastCompleted;
+    if (visit.status === "COMPLETED") lastCompleted = visit;
     const qualifies =
       visit.status === "COMPLETED" && visit.amountCents >= spec.minTicketCents;
     if (qualifies) priorCompleted = [...priorCompleted, visit];
@@ -128,7 +131,7 @@ export function evaluate(
       spec.winBack &&
       before.length >= spec.winBack.minVisits &&
       dayNumber(visit.startedAt, tz) -
-        dayNumber(before.at(-1)!.startedAt, tz) >=
+        dayNumber(previousCompleted!.startedAt, tz) >=
         spec.winBack.gapDays &&
       !winBackDates.some(
         (d) =>
@@ -138,7 +141,14 @@ export function evaluate(
       (options?.includeFixtures ||
         !["BACKFILL", "FIXTURE"].includes(visit.source ?? ""));
     if (!regular && !winBack) continue;
-    if (existing.has(visit.id)) continue;
+    if (existing.has(visit.id)) {
+      if (regular) {
+        current = 0;
+        anchor = undefined;
+        basis = [];
+      }
+      continue;
+    }
     const amountCents = regular ? spec.rewardCents : spec.winBack!.rewardCents;
     const basisVisitIds = regular ? basis : [visit.id];
     if (regular) {

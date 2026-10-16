@@ -66,6 +66,22 @@ describe("Analyst turn route", () => {
     expect(mocks.stream).not.toHaveBeenCalled();
   });
   it("rejects invalid bodies and model/provider overrides", async () => {
+    const bad = await POST(
+      request({
+        ...body,
+        input: [
+          {
+            type: "function_call",
+            id: "x",
+            callId: "x",
+            name: "program_metrics",
+            arguments: "{broken",
+          },
+        ],
+      }),
+    );
+    expect(bad.status).toBe(400);
+    expect(await getDb().select().from(aiCalls)).toHaveLength(0);
     expect((await POST(request({}))).status).toBe(400);
     expect(
       (await POST(request({ ...body, model: { id: "arbitrary" } }))).status,

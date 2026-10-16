@@ -7,6 +7,7 @@ import type {
   AgWidgetDataFormat,
 } from "ag-studio";
 import type { AgWidgetDefinition } from "ag-studio-react";
+import { customFormatShape } from "./format";
 export type LedgerDef = AgWidgetData<
   {
     time: AgWidgetFieldReference[];
@@ -25,6 +26,20 @@ type Dot = {
   tip: string;
 };
 function CustomerLedger(p: AgWidgetParams<LedgerDef>) {
+  useEffect(() => {
+    p.widgetApi.addEventListener("toolbarAction", (e) => {
+      const fields = [
+        p.dataMapping.time?.[0],
+        p.dataMapping.amount?.[0],
+        p.dataMapping.who?.[0],
+      ].filter((x): x is AgWidgetField => !!x);
+      if (e.id === "export" && fields.length === 3)
+        e.startTransition(() =>
+          p.widgetApi.exportCsv({ requests: [{ fields }] }),
+        );
+    });
+    return () => p.widgetApi.removeEventListener("toolbarAction");
+  }, [p.widgetApi, p.dataMapping]);
   const [dots, setDots] = useState<Dot[]>([]),
     [error, setError] = useState(false),
     [end] = useState(() => Date.now());
@@ -209,11 +224,32 @@ export const customerLedger: AgWidgetDefinition<"customer-ledger", LedgerDef> =
     comp: CustomerLedger,
     defaultSize: { width: 480, height: 280 },
     minSize: { width: 360, height: 200 },
-    toolbar: ["duplicate", "delete"],
+    toolbar: [
+      { id: "export", type: "button", label: "Export", icon: "csv" },
+      "duplicate",
+      "delete",
+    ],
+    formatShape: customFormatShape,
     dataMapping: {
-      time: { type: "field", supportedRoles: ["temporal"], required: true },
-      amount: { type: "field", supportedRoles: ["numeric"], required: true },
-      who: { type: "field", supportedRoles: ["category"], required: true },
+      time: {
+        type: "field",
+        supportedRoles: ["temporal"],
+        required: true,
+        aiDescription: "Visit time, usually visits.started_at.",
+      },
+      amount: {
+        type: "field",
+        supportedRoles: ["numeric"],
+        required: true,
+        aiDescription: "Visit amount, usually visits.amount.",
+      },
+      who: {
+        type: "field",
+        supportedRoles: ["category"],
+        required: true,
+        aiDescription:
+          "Pseudonymous regular code, usually visits.customer_label.",
+      },
     },
     form: ({ createDefaults }) =>
       createDefaults({
@@ -225,6 +261,8 @@ export const customerLedger: AgWidgetDefinition<"customer-ledger", LedgerDef> =
         supportsCrossHighlight: false,
       }),
     ai: {
+      configuration:
+        "Map time to visits.started_at, amount to visits.amount, who to visits.customer_label. Format supports a title.",
       description: "Timeline of visits and rewards per regular",
       usage:
         "Inspect purchase and reward history; filter a regular by clicking the label.",

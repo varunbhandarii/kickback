@@ -42,6 +42,29 @@ export const sourceFields = {
     refund_id: "text",
     note: "text",
   },
+  ai_usage: {
+    day: "date",
+    runs: "integer",
+    turns: "integer",
+    tool_calls: "integer",
+    tool_errors: "integer",
+    input_tokens: "integer",
+    output_tokens: "integer",
+    cost_cents: "currency",
+    p95_ms: "integer",
+  },
+  cohorts: {
+    cohort_month: "text",
+    customers: "integer",
+    returned_30: "integer",
+    returned_60: "integer",
+    returned_90: "integer",
+    rate_30: "percentage",
+    rate_60: "percentage",
+    rate_90: "percentage",
+    period: "text",
+    includes_demo: "boolean",
+  },
   daily_summary: {
     day: "date",
     visits: "integer",
@@ -56,6 +79,10 @@ export const sourceFields = {
 } as const;
 export type StudioTable = keyof typeof sourceFields;
 export const tableDescriptions: Record<StudioTable, string> = {
+  ai_usage:
+    "Daily Analyst counts and server-authoritative token usage over 30 days. cost_cents is formatted in USD; no prompt or tool arguments are stored in telemetry.",
+  cohorts:
+    "First qualifying visit cohorts over twelve local months, excluding FIXTURE history. Second-visit rates are descriptive, not causal; recent cohorts have incomplete follow-up. REPLAY is labeled demo history.",
   customers:
     "Recognized wallets at this business. Codes are pseudonymous. Progress uses the active program; synthetic customers have no live reward progress.",
   visits:

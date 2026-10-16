@@ -6,7 +6,7 @@ import {
   randomBytes,
 } from "node:crypto";
 import { getEnv } from "../env";
-function derive(info: string) {
+export function derive(info: string) {
   return Buffer.from(
     hkdfSync(
       "sha256",

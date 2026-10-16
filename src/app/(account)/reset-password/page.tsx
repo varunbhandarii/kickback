@@ -1,3 +1,4 @@
+export const metadata = { title: "Reset password" };
 import AccountForm from "../account-form";
 export default async function Reset({
   searchParams,

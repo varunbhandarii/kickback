@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -7,9 +8,16 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/:path*",
+        headers: securityHeaders(
+          process.env.SENTRY_CSP_REPORT_URL || undefined,
+          process.env.APP_URL,
+        ),
+      },
+      {
+        source: "/pay/:slug/progress",
         headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],
       },
     ];

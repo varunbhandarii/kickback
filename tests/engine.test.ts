@@ -177,7 +177,7 @@ describe("reward rules", () => {
   );
   it("renders a safe note", () =>
     expect(rewardNote({ ...defaultProgram }, "Rosa's Cafe")).toBe(
-      "Thanks for 5 visits, this one's on Rosa's Cafe",
+      "Thanks for 5 visits: a loyalty reward from Rosa's Cafe",
     ));
   it("rejects unsafe notes", () =>
     expect(() =>

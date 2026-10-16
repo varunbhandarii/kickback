@@ -61,7 +61,7 @@ const demos = [
       spendCents: 4000,
       rewardCents: 300,
       windowDays: 45,
-      noteTemplate: "Thanks for {n}, this one's on {merchant}",
+      noteTemplate: "Thanks for {n}: a loyalty reward from {merchant}",
     },
   },
 ];

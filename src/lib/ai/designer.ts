@@ -91,8 +91,8 @@ export function candidateSpec(c: Candidate): ProgramSpec {
     settlement: c.settlement,
     noteTemplate:
       c.type === "VISIT_MILESTONE"
-        ? "Thanks for {n} visits, this one's on {merchant}"
-        : "Thanks for {n}, this one's on {merchant}",
+        ? "Thanks for {n} visits: a loyalty reward from {merchant}"
+        : "Thanks for {n}: a loyalty reward from {merchant}",
   };
   return c.type === "VISIT_MILESTONE"
     ? { ...common, type: "VISIT_MILESTONE", n: c.n! }

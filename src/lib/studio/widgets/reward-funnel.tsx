@@ -7,6 +7,7 @@ import type {
 } from "ag-studio";
 import type { AgWidgetDefinition } from "ag-studio-react";
 import type { CockpitContext } from "../context";
+import { customFormatShape } from "./format";
 export type RewardFunnelDef = AgWidgetData<
   { step: AgWidgetFieldReference[]; count: AgWidgetFieldReference[] },
   AgWidgetDataFormat<Record<string, never>>
@@ -18,6 +19,15 @@ function RewardFunnel(
     [error, setError] = useState(false),
     step = p.dataMapping.step?.[0],
     count = p.dataMapping.count?.[0];
+  useEffect(() => {
+    p.widgetApi.addEventListener("toolbarAction", (e) => {
+      if (e.id === "export" && step && count)
+        e.startTransition(() =>
+          p.widgetApi.exportCsv({ requests: [{ fields: [step, count] }] }),
+        );
+    });
+    return () => p.widgetApi.removeEventListener("toolbarAction");
+  }, [p.widgetApi, step, count]);
   useEffect(() => {
     if (!step || !count) return;
     const abort = new AbortController();
@@ -141,14 +151,27 @@ export const rewardFunnel: AgWidgetDefinition<
   comp: RewardFunnel,
   defaultSize: { width: 480, height: 280 },
   minSize: { width: 320, height: 200 },
-  toolbar: ["duplicate", "delete"],
+  toolbar: [
+    { id: "export", type: "button", label: "Export", icon: "csv" },
+    "duplicate",
+    "delete",
+  ],
+  formatShape: customFormatShape,
   dataMapping: {
     step: {
       type: "field",
       supportedRoles: ["numeric", "category"],
       required: true,
+      aiDescription:
+        "Progress step per customer, usually customers.progress_current.",
     },
-    count: { type: "field", supportedRoles: ["numeric"], required: true },
+    count: {
+      type: "field",
+      supportedRoles: ["numeric"],
+      required: true,
+      aiDescription:
+        "Customers per step, usually customers.label with aggregation count.",
+    },
   },
   form: ({ createDefaults }) =>
     createDefaults({
@@ -159,6 +182,8 @@ export const rewardFunnel: AgWidgetDefinition<
       supportsCrossHighlight: false,
     }),
   ai: {
+    configuration:
+      "Map step to customers.progress_current and count to count(customers.label). Format supports a title. Filter customers.wallets for a wallet-specific funnel.",
     description:
       "Customers at each step toward the current reward; shows cohort sizes and drop-off.",
     usage:

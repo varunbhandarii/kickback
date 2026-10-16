@@ -1,3 +1,4 @@
+export const metadata = { title: "Forgot password" };
 import Link from "next/link";
 import { emailConfigured } from "@/lib/email";
 import AccountForm from "../account-form";

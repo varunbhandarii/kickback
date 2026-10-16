@@ -1,8 +1,16 @@
 import type { AgDefaultRegistry, AgDefaultWidgetDefinition } from "ag-studio";
-import { createWidgets, type AgWidgetDefinition } from "ag-studio-react";
+import {
+  createWidgets,
+  type AgWidgetDefinition,
+  type AgAiToolDisplay,
+} from "ag-studio-react";
 import { rewardFunnel, type RewardFunnelDef } from "./reward-funnel";
 import { customerLedger, type LedgerDef } from "./customer-ledger";
-export interface KickbackRegistry extends Omit<AgDefaultRegistry, "widgets"> {
+export interface KickbackRegistry extends Omit<
+  AgDefaultRegistry,
+  "widgets" | "aiToolDisplay"
+> {
+  aiToolDisplay: AgAiToolDisplay;
   widgets: readonly (
     | AgDefaultWidgetDefinition
     | AgWidgetDefinition<"reward-funnel", RewardFunnelDef>

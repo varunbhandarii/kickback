@@ -25,6 +25,7 @@ import {
 } from "./actions";
 import type { DesignResult } from "@/lib/ai/designer/pipeline";
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+export const metadata = { title: "Overview" };
 export default async function Dashboard() {
   const { user, merchant } = await requireMerchant(),
     db = getDb(),
@@ -179,6 +180,22 @@ export default async function Dashboard() {
           </form>
         )}
       </div>
+      <p>
+        <Link href="/m/help">Reports, reward accounting and privacy</Link> ·{" "}
+        <Link href="/m/rewards">Download rewards CSV</Link>
+      </p>
+      {loaded &&
+        [
+          loaded.spec.noteTemplate,
+          ...(loaded.spec.noteVariants ?? []),
+          ...(loaded.spec.welcomeBackNote ? [loaded.spec.welcomeBackNote] : []),
+        ].some((n) => !/loyalty reward/i.test(n)) && (
+          <p className="merchant-notice">
+            Update your thank-you notes to say “loyalty reward” when you next{" "}
+            <Link href="/m/onboarding/program">review your program</Link>. Your
+            approved notes remain active until then.
+          </p>
+        )}
       {merchant.onboardingStep !== "done" && (
         <p className="merchant-banner">
           <Link href="/m/onboarding">Continue setup</Link> · Next:{" "}
@@ -186,7 +203,7 @@ export default async function Dashboard() {
         </p>
       )}
       <div className="merchant-grid">
-        <DigestCard merchantId={merchant.id}/>
+        <DigestCard merchantId={merchant.id} />
         {!!fixtureCount.n && (
           <p className="merchant-banner">
             Includes demo history (synthetic): {fixtureCount.n} visits. These

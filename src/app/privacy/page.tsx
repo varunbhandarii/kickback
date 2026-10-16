@@ -1,3 +1,4 @@
+export const metadata = { title: "Privacy" };
 export default function Privacy() {
   return (
     <main className="mx-auto max-w-2xl p-8">
@@ -36,6 +37,20 @@ export default function Privacy() {
         notices to business owners.
       </p>
       <h2 className="mt-8 text-xl font-semibold">Your choices</h2>
+      <p className="mt-4">
+        A private progress link lasts up to 365 days and is renewed after a
+        recognized payment. Anyone holding it can see visit progress, the
+        last-visit date and recent reward totals without signing in. Keep it
+        private. It shows no payer contacts or wallet type.
+      </p>
+      <p className="mt-4">
+        Analyst telemetry stores run identifiers, counts and timing for up to 90
+        days, with server token/cost records; it contains no prompts, answers or
+        tool arguments. When security reporting is configured, a first-party
+        relay removes URL query strings, fragments and snippets before
+        forwarding CSP reports to Sentry. The operator controls Sentry
+        retention.
+      </p>
       <p className="mt-4">
         The Cockpit shows business-specific customer codes, not customer
         contacts. If the business uses the Analyst, relevant program rules,
