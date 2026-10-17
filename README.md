@@ -96,7 +96,7 @@ The loyalty ledger stores merchant-specific HMAC keys and payment identifiers, n
 
 ## Try the API
 
-Import the [Postman collection and placeholder environment](postman/README.md). Keep credentials and session cookies in local values. A public Run in Postman link will be added after the collection is published.
+Read the [published API documentation](https://documenter.getpostman.com/view/59031656/2sBYHSxfXm), or import the [Postman collection and placeholder environment](postman/README.md). Keep credentials and session cookies in local values.
 
 ## Tools used
 

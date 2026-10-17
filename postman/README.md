@@ -1,5 +1,7 @@
 # Kickback API examples
 
+Browse the [published API documentation](https://documenter.getpostman.com/view/59031656/2sBYHSxfXm). Its environment uses placeholders; supply credentials only in your own local values or Vault.
+
 Import `Kickback.postman_collection.json` and `kickback-sandbox.postman_environment.json` into Postman and select the `kickback-sandbox` environment. The collection has two folders: **PayPal sandbox** and **Kickback**.
 
 Use local values or Vault for actual sandbox credentials. Shared environment values in these files are placeholders only. Never share or persist a client secret, access token, private webhook payload or session cookie. The OAuth script stores tokens as local execution variables, not collection/shared variables.
