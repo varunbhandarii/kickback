@@ -40,7 +40,7 @@ export function defaultState(
               value: [sum("daily_summary.rewards_paid")],
               sparklineX: [field("daily_summary.day")],
             },
-            format: title("Rewards paid · 30 days"),
+            format: title("Rewards sent · 30 days"),
           },
           cost: {
             type: "value",
@@ -56,12 +56,12 @@ export function defaultState(
               value: [sum("daily_summary.visits")],
               sparklineX: [field("daily_summary.day")],
             },
-            format: title("Completed visits · 30 days"),
+            format: title("Visits · 30 days"),
           },
           held: {
             type: "value",
             dataMapping: { value: [sum("daily_summary.held")] },
-            format: title("Needs attention · 30 days"),
+            format: title("Needs review · 30 days"),
           },
           trend: {
             type: "line-chart",
@@ -80,7 +80,7 @@ export function defaultState(
               categoryKey: [field("visits.wallet")],
               valueKey: [{ id: "visits.id", aggregation: "count" }],
             },
-            format: title("Wallet mix"),
+            format: title("How customers pay"),
           },
           customers: {
             type: "grid",
@@ -114,7 +114,7 @@ export function defaultState(
                 "reason",
               ].map((x) => field("rewards." + x)),
             },
-            format: title("Needs attention"),
+            format: title("Needs review"),
           },
           funnel: {
             type: "reward-funnel",
@@ -122,7 +122,7 @@ export function defaultState(
               step: [field("customers.progress_current")],
               count: [{ id: "customers.label", aggregation: "count" }],
             },
-            format: title("Reward Funnel"),
+            format: title("Reward funnel"),
           },
           ledger: {
             type: "customer-ledger",
@@ -131,7 +131,7 @@ export function defaultState(
               amount: [field("visits.amount")],
               who: [field("visits.customer_label")],
             },
-            format: title("Customer Ledger"),
+            format: title("Customer ledger"),
           },
         },
         widgetLayout: {
@@ -242,7 +242,7 @@ export function defaultState(
           amount: [field("visits.amount")],
           who: [field("visits.customer_label")],
         },
-        format: title("Customer Ledger"),
+        format: title("Customer ledger"),
       },
       visits_pivot: {
         type: "pivot-grid",

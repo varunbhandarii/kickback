@@ -125,10 +125,7 @@ export default function StudioHost({
       modules={modules}
       licenseKey={process.env.NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY ?? ""}
     >
-      <div
-        className="studio-surface"
-        style={{ height: "78vh", minHeight: 640, width: "100%" }}
-      >
+      <div className="studio-surface" style={{ width: "100%" }}>
         <AgStudio<KickbackRegistry>
           widgets={widgets}
           data={data}

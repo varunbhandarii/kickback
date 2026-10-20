@@ -10,11 +10,28 @@ import { ruleInWords } from "@/lib/studio/context";
 import CockpitClient from "./cockpit-client";
 import { localDay } from "@/lib/engine/evaluate";
 import { measurementSentence } from "@/lib/studio/cohorts";
+import Link from "next/link";
+import { State } from "@/components/ui";
 export const metadata = { title: "Cockpit" };
 export default async function CockpitPage() {
   const { merchant } = await requireMerchant(),
     loaded = await loadMerchant(merchant.slug, true);
-  if (!loaded) return <p>Finish business setup to open the cockpit.</p>;
+  if (!loaded)
+    return (
+      <div className="card" style={{ margin: 24 }}>
+        <State
+          icon="cockpit"
+          title="Finish setup to open the Cockpit"
+          action={
+            <Link href="/m/onboarding" className="btn btn-primary">
+              Continue setup
+            </Link>
+          }
+        >
+          <p>The Cockpit shows your program once it has a rule and some history.</p>
+        </State>
+      </div>
+    );
   const [[saved], [demo]] = await Promise.all([
     getDb()
       .select()

@@ -1,23 +1,67 @@
 import { studioTheme } from "ag-studio";
+// Studio takes literal colors, so this is the one place outside globals.css
+// that repeats the palette. tests/ui-copy.test.ts keeps the two in step.
+const shared = {
+  fontFamily: "inherit",
+  fontSize: 14,
+  borderRadius: 10,
+  studioWidgetBorderRadius: 12,
+  studioWidgetPadding: 16,
+  studioWidgetTitleFontSize: 15,
+  studioWidgetBorder: false,
+  gridRowHeight: 40,
+  studioAiPanelWidth: 360,
+};
+export const lightParams = {
+  ...shared,
+  accentColor: "#0B5D45",
+  backgroundColor: "#FFFFFF",
+  foregroundColor: "#10201A",
+  textColor: "#10201A",
+  subtleTextColor: "#5F6F67",
+  borderColor: "#D9E1DB",
+  iconColor: "#46564E",
+  rowHoverColor: "#EDF2EE",
+  menuBackgroundColor: "#FFFFFF",
+  browserColorScheme: "light",
+  studioCanvasBackgroundColor: "#EEF2EF",
+  studioWidgetBackgroundColor: "#FFFFFF",
+  studioWidgetTitleTextColor: "#10201A",
+  gridHeaderBackgroundColor: "#EDF2EE",
+  gridHeaderTextColor: "#5F6F67",
+  gridCellTextColor: "#10201A",
+  gridRowHoverColor: "#EDF2EE",
+  chartTextColor: "#46564E",
+  chartSubtleTextColor: "#5F6F67",
+  chartGridLineColor: "#E6ECE8",
+  chartAxisLineColor: "#7F8F86",
+  chartTooltipBackgroundColor: "#FFFFFF",
+} as const;
+export const darkParams = {
+  ...shared,
+  accentColor: "#5FD3A6",
+  backgroundColor: "#111C18",
+  foregroundColor: "#E4EEE8",
+  textColor: "#E4EEE8",
+  subtleTextColor: "#8C9E95",
+  borderColor: "#22322B",
+  iconColor: "#A9BAB1",
+  rowHoverColor: "#17241F",
+  menuBackgroundColor: "#17241F",
+  browserColorScheme: "dark",
+  studioCanvasBackgroundColor: "#0E1814",
+  studioWidgetBackgroundColor: "#111C18",
+  studioWidgetTitleTextColor: "#E4EEE8",
+  gridHeaderBackgroundColor: "#17241F",
+  gridHeaderTextColor: "#8C9E95",
+  gridCellTextColor: "#E4EEE8",
+  gridRowHoverColor: "#17241F",
+  chartTextColor: "#A9BAB1",
+  chartSubtleTextColor: "#8C9E95",
+  chartGridLineColor: "#1D2B25",
+  chartAxisLineColor: "#5C7066",
+  chartTooltipBackgroundColor: "#17241F",
+} as const;
 export const cockpitTheme = studioTheme
-  .withParams(
-    {
-      fontFamily: "inherit",
-      borderRadius: 8,
-      accentColor: "#00614d",
-      studioWidgetBorderRadius: 12,
-      studioWidgetPadding: 12,
-      studioCanvasBackgroundColor: "#f5f8f7",
-      gridRowHeight: 36,
-      chartTextColor: "#172338",
-    },
-    "light",
-  )
-  .withParams(
-    {
-      accentColor: "#52d4b2",
-      studioCanvasBackgroundColor: "#111d26",
-      chartTextColor: "#e5f1ef",
-    },
-    "dark",
-  );
+  .withParams(lightParams, "light")
+  .withParams(darkParams, "dark");
