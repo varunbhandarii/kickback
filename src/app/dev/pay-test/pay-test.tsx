@@ -1,6 +1,7 @@
 "use client";
 import Script from "next/script";
-import Link from "next/link";
+import { PolicyLayout } from "@/components/policy-layout";
+import { Icon } from "@/components/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MerchantName } from "@/lib/paypal/merchants";
 type Summary = { orderId?: string; captureId?: string; captureStatus?: string; accountId?: string; wallet?: string; amount?: { value: string } };
@@ -113,16 +114,20 @@ export default function PayTest({ merchant, clientId, bnCode }: { merchant: Merc
     return () => { cancelled = true; cleanup.forEach((fn) => fn()); container?.replaceChildren(); };
   }, [loaded, clientId, bnCode, merchant, capture]);
 
-  return <main className="mx-auto max-w-2xl p-8">
+  return <PolicyLayout title="Sandbox checkout">
     <Script src="https://www.sandbox.paypal.com/web-sdk/v6/core" strategy="afterInteractive" onReady={() => setLoaded(true)} onError={() => setStatus("Unable to load PayPal SDK")} />
-    <Link href="/" className="text-blue-700">← Kickback</Link>
-    <h1 className="mt-6 text-3xl font-semibold">Sandbox checkout</h1>
-    <p className="my-4">Merchant: <strong>{merchant}</strong>. Sign in using a sandbox buyer account.</p>
-    <nav className="mb-6 flex gap-4">{["platform", "rosas", "salon", "bakery"].map((name) => <a key={name} href={`?merchant=${name}`} className="underline">{name}</a>)}</nav>
-    <label className="block">Amount in USD <input className="ml-4 rounded border p-2" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" disabled={busy} /></label>
-    <div ref={buttons} className="my-6 grid gap-3" aria-busy={busy} style={{ pointerEvents: busy ? "none" : "auto", opacity: busy ? 0.5 : 1 }} />
-    <p role="status">{status}</p>
-    {retry && <button className="mt-4 rounded border p-3" disabled={busy} onClick={async () => { if (!pendingOrder.current) return; setBusy(true); try { await capture(pendingOrder.current); } catch (e) { setStatus(e instanceof Error ? e.message : "Capture failed"); } finally { setBusy(false); } }}>Retry capture</button>}
-    {summary && <div className="mt-6 rounded bg-slate-100 p-4"><h2 className="font-semibold">Capture result</h2><pre className="mt-3 overflow-auto text-sm">{JSON.stringify(summary, null, 2)}</pre><p className="mt-4 text-sm">Record these values in your local verification log. Check the merchant balance and buyer activity in sandbox.paypal.com.</p></div>}
-  </main>;
+    <p className="banner banner-danger"><Icon name="alert" size={18} /> Sandbox tool. Test balances only; never use real accounts here.</p>
+    <p>Merchant: <strong>{merchant}</strong>. Sign in using a sandbox buyer account.</p>
+    <nav aria-label="Sandbox merchants" className="seg" style={{ alignSelf: "flex-start" }}>{["platform", "rosas", "salon", "bakery"].map((name) => <a key={name} href={`?merchant=${name}`} className="seg-item" aria-current={name === merchant ? "page" : undefined}>{name}</a>)}</nav>
+    <div className="card card-pad flex flex-col gap-4">
+      <label className="field" style={{ maxWidth: 280 }}>
+        <span className="field-label">Amount in USD</span>
+        <input className="input num" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" disabled={busy} />
+      </label>
+      <div ref={buttons} className="grid gap-4" aria-busy={busy} style={{ pointerEvents: busy ? "none" : "auto" }} />
+      <p role="status" className="status-line">{busy && <span className="spinner" aria-hidden="true" />}{status}</p>
+      {retry && <button className="btn btn-secondary" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={async () => { if (!pendingOrder.current) return; setBusy(true); try { await capture(pendingOrder.current); } catch (e) { setStatus(e instanceof Error ? e.message : "Capture failed"); } finally { setBusy(false); } }}><Icon name="refresh" size={16} />Retry capture</button>}
+    </div>
+    {summary && <section className="card card-pad flex flex-col gap-3" aria-labelledby="capture-result"><h2 id="capture-result" style={{ marginTop: 0 }}>Capture result</h2><pre className="code" style={{ overflow: "auto" }}>{JSON.stringify(summary, null, 2)}</pre><p className="caption" style={{ fontSize: 14 }}>Record these values in your local verification log. Check the merchant balance and buyer activity in sandbox.paypal.com.</p></section>}
+  </PolicyLayout>;
 }

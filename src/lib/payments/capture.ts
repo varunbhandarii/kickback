@@ -66,6 +66,8 @@ export async function capturePayment(
     return {
       captureStatus: known.status,
       captureId: known.id,
+      amountCents: stored.amountCents,
+      wallet: stored.wallet,
       recognized: Boolean(customer),
       progressUrl: progressLink(
         merchant,
@@ -122,6 +124,8 @@ export async function capturePayment(
   return {
     captureStatus: result.captureStatus,
     captureId: result.captureId,
+    amountCents: stored.amountCents,
+    wallet: stored.wallet,
     recognized: result.recognized,
     progressUrl: progressLink(
       merchant,

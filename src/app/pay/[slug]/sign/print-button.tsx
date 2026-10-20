@@ -1,2 +1,10 @@
 "use client";
-export default function PrintButton() { return <button className="no-print pay-retry" onClick={() => window.print()}>Print sign</button>; }
+import { Icon } from "@/components/icons";
+export default function PrintButton() {
+  return (
+    <button type="button" className="btn btn-primary" onClick={() => window.print()}>
+      <Icon name="printer" size={18} />
+      Print sign
+    </button>
+  );
+}

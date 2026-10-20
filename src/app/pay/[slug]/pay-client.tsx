@@ -1,7 +1,7 @@
 "use client";
 import Script from "next/script";
-import Link from "next/link";
 import {
+  type CSSProperties,
   useCallback,
   useEffect,
   useRef,
@@ -12,6 +12,17 @@ import type { ProgramSpec } from "@/lib/engine/program";
 import type { Progress } from "@/lib/engine/evaluate";
 import type { MenuItem } from "@/db/schema";
 import type {} from "@/app/dev/pay-test/pay-test";
+import { Icon } from "@/components/icons";
+import {
+  MenuPicker,
+  PayFooter,
+  ProgramTicket,
+  Receipt,
+  RewardTicket,
+  SaveCard,
+  ShopBand,
+  VisitTicket,
+} from "./pay-views";
 type Reward = {
   id: string;
   token: string;
@@ -25,7 +36,17 @@ type Result = {
   progress?: Progress;
   reward?: Reward;
   progressUrl?: string;
+  amountCents?: number;
+  wallet?: string;
 };
+const walletName = (w?: string) =>
+  w?.toUpperCase() === "VENMO" ? "Venmo" : w ? "PayPal" : undefined;
+function prefersDark() {
+  const set = document.documentElement.dataset.theme;
+  if (set === "dark") return true;
+  if (set === "light") return false;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const shareSubscribe = () => () => {},
   shareSnapshot = () => typeof navigator.share === "function",
@@ -61,6 +82,7 @@ export default function PayClient({
     buttons = useRef<HTMLDivElement>(null),
     busyRef = useRef(false);
   const [linkStatus, setLinkStatus] = useState("");
+  const [methods, setMethods] = useState<"loading" | number>("loading");
   const canShare = useSyncExternalStore(shareSubscribe, shareSnapshot, noShare);
   const selection = useRef({ item, amount });
   useEffect(() => {
@@ -154,9 +176,14 @@ export default function PayClient({
         count++;
         const button = document.createElement(`${wallet}-button`);
         button.setAttribute("type", "pay");
+        // Only PayPal's documented color options: white on dark surfaces.
         button.setAttribute(
           "class",
-          wallet === "paypal" ? "paypal-gold" : "venmo-blue",
+          wallet === "paypal"
+            ? prefersDark()
+              ? "paypal-white"
+              : "paypal-gold"
+            : "venmo-blue",
         );
         button.style.display = "block";
         button.style.width = "100%";
@@ -220,6 +247,7 @@ export default function PayClient({
         cleanup.push(() => button.removeEventListener("click", click));
         container.appendChild(button);
       }
+      setMethods(count);
       if (!resumed)
         setStatus(
           count
@@ -228,8 +256,10 @@ export default function PayClient({
         );
     }
     init().catch(() => {
-      if (!cancelled)
+      if (!cancelled) {
+        setMethods(0);
         setStatus("Unable to load payment methods. Please refresh.");
+      }
     });
     return () => {
       cancelled = true;
@@ -282,195 +312,200 @@ export default function PayClient({
     };
   }, [rewardId, rewardToken]);
   const progress = result?.progress,
-    reward = result?.reward;
+    reward = result?.reward,
+    paidWallet = walletName(result?.wallet);
+  const selectedCents =
+    item === "other"
+      ? Math.round(Number(amount) * 100)
+      : (menu.find((m) => m.id === item)?.priceCents ?? 0);
+  const totalValid =
+    item !== "other" ||
+    (/^\d{1,3}(\.\d{1,2})?$/.test(amount) &&
+      selectedCents >= 100 &&
+      selectedCents <= 50000);
+  const checkAgain = async () => {
+    if (!retry) return;
+    setBusy(true);
+    try {
+      await capture(retry);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Please try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copyLink = async () => {
+    if (!result?.progressUrl) return;
+    try {
+      await navigator.clipboard.writeText(result.progressUrl);
+      setLinkStatus("Link copied");
+    } catch {
+      setLinkStatus("Open your card below and bookmark it.");
+    }
+  };
+  const shareLink = () => {
+    if (!result?.progressUrl) return;
+    void navigator
+      .share({ title: `Your visits at ${name}`, url: result.progressUrl })
+      .catch(() => {});
+  };
+  const startOver = () => {
+    setResult(undefined);
+    setLinkStatus("");
+    setStatus(methods === 0 ? status : "Choose a wallet to pay");
+  };
+  const paidLine = !result
+    ? ""
+    : result.captureStatus === "PENDING"
+      ? "Your payment is processing."
+      : result.amountCents !== undefined
+        ? `Paid ${money(result.amountCents)}${paidWallet ? ` with ${paidWallet}` : ""}. Thank you!`
+        : "Payment received. Thank you!";
+  const counted =
+    result?.recognized && reward
+      ? "Reward visit"
+      : result?.recognized &&
+          progress?.type === "VISIT_MILESTONE" &&
+          (result.amountCents === undefined ||
+            result.amountCents >= spec.minTicketCents)
+        ? `Visit ${progress.current}`
+        : undefined;
   return (
-    <main className="pay-shell">
+    <main className="customer">
       <Script
         src={`https://${sandbox ? "www.sandbox" : "www"}.paypal.com/web-sdk/v6/core`}
         strategy="afterInteractive"
         onReady={() => setReady(true)}
         onError={() => setStatus("Unable to load PayPal. Please refresh.")}
       />
-      <div className="pay-brand">
-        KICKBACK <span>{sandbox && "SANDBOX DEMO"}</span>
-      </div>
-      <header>
-        <p className="pay-eyebrow">A little thanks for coming back</p>
-        <h1>{name}</h1>
-        {spec.signPitch && <p>{spec.signPitch}</p>}
-        <p>
-          {spec.type === "VISIT_MILESTONE"
-            ? `Visit ${spec.n} times`
-            : `Spend ${money(spec.spendCents)}`}{" "}
-          in {spec.windowDays} days and get{" "}
-          <strong>{money(spec.rewardCents)} back.</strong>
-        </p>
-      </header>
-      <section className="pay-card" aria-label="Choose your purchase">
-        <h2>What are you having?</h2>
-        <div className="pay-menu">
-          {menu.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-pressed={item === entry.id}
-              disabled={busy || paused}
-              onClick={() => setItem(entry.id)}
-            >
-              <span>{entry.name}</span>
-              <strong>{money(entry.priceCents)}</strong>
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-pressed={item === "other"}
-            disabled={busy || paused}
-            onClick={() => setItem("other")}
-          >
-            Other amount
-          </button>
-        </div>
-        {item === "other" && (
-          <label className="pay-amount">
-            Amount in USD
-            <input
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              disabled={busy}
-              aria-label="Amount in USD"
-            />
-          </label>
-        )}
-        <div
-          ref={buttons}
-          className="pay-wallets"
-          aria-busy={busy}
-          style={{
-            pointerEvents: busy ? "none" : "auto",
-            opacity: busy ? 0.5 : 1,
-          }}
-        />
-        <p role="status" aria-live="polite">
-          {status}
-        </p>
-        {retry && (
-          <button
-            className="pay-retry"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await capture(retry);
-              } catch (e) {
-                setStatus(e instanceof Error ? e.message : "Please try again");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Check payment again
-          </button>
-        )}
-      </section>
-      {result && (
-        <section className="pay-thanks" aria-live="polite">
-          <h2>Thanks for stopping by.</h2>
-          {!result.recognized ? (
-            <p>
-              Pay with PayPal or Venmo to earn rewards. This purchase could not
-              be linked to a wallet.
-            </p>
-          ) : reward ? (
-            <p>
-              {["SENT", "CONFIRMED"].includes(reward.state)
-                ? `${money(reward.amountCents)} sent ✓`
-                : reward.state === "OFFSET"
-                  ? "Your reward was applied to an earlier returned purchase."
-                  : reward.state === "CANCELLED"
-                    ? "This reward is no longer eligible. See the program terms."
-                    : ["FAILED", "HELD", "DEFERRED"].includes(reward.state)
-                      ? "Your reward needs a check. Please contact the merchant."
-                      : `${reward.kind === "WIN_BACK" ? "Welcome back — " : ""}${money(reward.amountCents)} is on its way back to your wallet.`}
-            </p>
-          ) : progress?.blocked ? (
-            <p>
-              Reward limit reached. Visits still count toward future rewards.
+      <ShopBand
+        name={name}
+        sandbox={sandbox}
+        compact={Boolean(result)}
+        sub={
+          result ? (
+            <p className="flex items-center gap-2.5" style={{ fontSize: 15 }}>
+              <span
+                className="flex flex-none items-center justify-center"
+                style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--brand-mint)", color: "#10201a" }}
+                aria-hidden="true"
+              >
+                <Icon name={result.captureStatus === "PENDING" ? "clock" : "check"} size={14} strokeWidth={3} />
+              </span>
+              <span className="num">{paidLine}</span>
             </p>
           ) : (
-            progress && (
-              <>
-                <p>
-                  {progress.type === "VISIT_MILESTONE"
-                    ? `Visit ${progress.current} of ${progress.target} — ${progress.target - progress.current} more for ${money(progress.rewardCents)} back`
-                    : `${money(progress.current)} of ${money(progress.target)} — ${money(progress.target - progress.current)} more for ${money(progress.rewardCents)} back`}
+            <p className="band-sub" style={{ fontSize: 15 }}>
+              {spec.signPitch || "Thanks for stopping by."}
+            </p>
+          )
+        }
+      />
+      <div className="customer-col">
+        {result && (
+          <>
+            {result.captureStatus === "PENDING" && (
+              <div className="banner banner-info" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+                <span>Your payment is processing. Visits count after it completes.</span>
+                {retry && (
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={checkAgain}>
+                    Check payment again
+                  </button>
+                )}
+              </div>
+            )}
+            {!result.recognized ? (
+              <section className="card card-pad flex flex-col gap-2" aria-labelledby="unlinked-title">
+                <h2 id="unlinked-title" className="card-title">
+                  This purchase didn&apos;t count as a visit
+                </h2>
+                <p className="text-2" style={{ fontSize: 15 }}>
+                  We couldn&apos;t link this payment to a wallet. Paying with PayPal or Venmo on
+                  this page next time will count.
                 </p>
-                <progress
-                  aria-label="Reward progress"
-                  max={progress.target}
-                  value={progress.current}
-                />
-              </>
-            )
-          )}
-          {result.recognized && result.progressUrl && (
-            <div>
-              <p>
-                <a href={result.progressUrl}>
-                  Save this link to check your visits
-                </a>
-              </p>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(result.progressUrl!);
-                    setLinkStatus("Link copied");
-                  } catch {
-                    setLinkStatus("Open the link above and bookmark it.");
-                  }
-                }}
-              >
-                Copy link
-              </button>
-              {canShare && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator
-                      .share({
-                        title: `Your visits at ${name}`,
-                        url: result.progressUrl,
-                      })
-                      .catch(() => {});
-                  }}
-                >
-                  Share link
-                </button>
-              )}
-              <p role="status">{linkStatus}</p>
-              <p>
-                Keep this link private. On your phone, use your browser menu to
-                add it to your Home Screen.
-              </p>
-            </div>
-          )}
-        </section>
-      )}
-      <footer>
-        <p>
-          Qualifying purchases start at {money(spec.minTicketCents)}. Purchases
-          within {spec.mergeWindowMin} minutes count as one visit.
-        </p>
-        <Link href={`/pay/${slug}/terms`}>Program terms</Link> ·{" "}
-        <Link href={`/pay/${slug}/terms#why-refund`}>
-          Why did I get a refund?
-        </Link>{" "}
-        · <Link href="/privacy">Privacy</Link>
-        {sandbox && (
-          <p>Use sandbox accounts only. Test balances have no real value.</p>
+              </section>
+            ) : reward ? (
+              <RewardTicket reward={reward} spec={spec} name={name} wallet={paidWallet} />
+            ) : progress ? (
+              <VisitTicket progress={progress} spec={spec} paidCents={result.amountCents} />
+            ) : null}
+            {result.recognized && result.progressUrl && (
+              <SaveCard
+                url={result.progressUrl}
+                canShare={canShare}
+                name={name}
+                onCopy={copyLink}
+                onShare={shareLink}
+                status={linkStatus}
+              />
+            )}
+            {result.amountCents !== undefined && (
+              <Receipt name={name} amountCents={result.amountCents} wallet={paidWallet} counted={counted} />
+            )}
+            <button type="button" className="btn btn-secondary btn-lg" onClick={startOver}>
+              Make another payment
+            </button>
+          </>
         )}
-      </footer>
+        <div hidden={Boolean(result)} className="flex flex-col gap-5">
+          <ProgramTicket spec={spec} slug={slug} />
+          <MenuPicker
+            menu={menu}
+            spec={spec}
+            item={item}
+            onSelect={setItem}
+            amount={amount}
+            onAmount={setAmount}
+            disabled={busy || paused}
+          />
+          <section aria-labelledby="pay-title" className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between" style={{ padding: "0 4px" }}>
+              <h2 id="pay-title" className="text-2" style={{ fontSize: 15, fontWeight: 500 }}>
+                Total
+              </h2>
+              <span className="kpi-value" style={{ fontSize: 26 }}>
+                {totalValid ? money(selectedCents) : "—"}
+              </span>
+            </div>
+            {paused ? (
+              <p className="banner banner-info">
+                {name} isn&apos;t taking payments on this page right now.
+              </p>
+            ) : (
+              <div
+                className="card wallets"
+                style={
+                  {
+                    "--paypal-button-border-radius": "10px",
+                    "--venmo-button-border-radius": "10px",
+                  } as CSSProperties
+                }
+              >
+                <div
+                  ref={buttons}
+                  className="wallet-slot"
+                  aria-busy={busy}
+                  hidden={methods === 0}
+                  style={{ pointerEvents: busy ? "none" : "auto" }}
+                />
+                <p className="status-line flex items-center gap-2" role="status" aria-live="polite">
+                  {busy && <span className="spinner" aria-hidden="true" />}
+                  {status}
+                </p>
+                {retry && !result && (
+                  <button type="button" className="btn btn-secondary" disabled={busy} onClick={checkAgain}>
+                    Check payment again
+                  </button>
+                )}
+                <p className="caption" style={{ textAlign: "center" }}>
+                  You confirm the payment in PayPal or Venmo. No sign-up, no app.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+        <PayFooter slug={slug} spec={spec} sandbox={sandbox} />
+      </div>
     </main>
   );
 }
