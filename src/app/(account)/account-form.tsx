@@ -1,5 +1,6 @@
 "use client";
-import { useActionState } from "react";
+import Link from "next/link";
+import { useActionState, useId } from "react";
 import { authClient } from "@/lib/auth-client";
 import {
   signIn,
@@ -34,19 +35,22 @@ export default function AccountForm({
     action,
     {},
   );
+  const id = useId();
+  const emailOnly = mode === "forgot" || mode === "magic";
   return (
-    <>
-      <form action={submit} className="merchant-form">
+    <div className="flex flex-col gap-5">
+      <form action={submit} className="form-stack">
         {mode === "sign-up" && (
-          <label>
-            Your name
-            <input name="name" autoComplete="name" maxLength={80} required />
+          <label className="field">
+            <span className="field-label">Your name</span>
+            <input className="input" name="name" autoComplete="name" maxLength={80} required />
           </label>
         )}
         {mode !== "reset" && (
-          <label>
-            Email
+          <label className="field">
+            <span className="field-label">Email</span>
             <input
+              className="input"
               type="email"
               name="email"
               autoComplete="email"
@@ -55,10 +59,21 @@ export default function AccountForm({
             />
           </label>
         )}
-        {!["forgot", "magic"].includes(mode) && (
-          <label>
-            Password
+        {!emailOnly && (
+          <div className="field">
+            <div className="flex items-baseline justify-between gap-3">
+              <label htmlFor={`${id}-password`} className="field-label">
+                {mode === "reset" ? "New password" : "Password"}
+              </label>
+              {mode === "sign-in" && (
+                <Link href="/forgot-password" style={{ fontSize: 13.5, fontWeight: 600 }}>
+                  Forgot password?
+                </Link>
+              )}
+            </div>
             <input
+              id={`${id}-password`}
+              className="input"
               type="password"
               name="password"
               autoComplete={
@@ -67,22 +82,33 @@ export default function AccountForm({
               minLength={mode === "sign-in" ? 1 : 10}
               maxLength={128}
               required
+              aria-describedby={mode === "sign-in" ? undefined : `${id}-password-help`}
             />
-          </label>
+            {mode !== "sign-in" && (
+              <span id={`${id}-password-help`} className="field-help">
+                At least 10 characters.
+              </span>
+            )}
+          </div>
         )}
         {mode === "reset" && <input type="hidden" name="token" value={token} />}
         {state.error && (
-          <p role="alert" className="merchant-error">
+          <p role="alert" className="alert">
             {state.error}
           </p>
         )}
-        {state.message && <p role="status">{state.message}</p>}
+        {state.message && (
+          <p role="status" className="banner banner-success">
+            {state.message}
+          </p>
+        )}
         <button
-          className="merchant-primary"
-          disabled={
-            pending || (["forgot", "magic"].includes(mode) && !emailEnabled)
-          }
+          type="submit"
+          className="btn btn-primary btn-lg btn-block"
+          disabled={pending || (emailOnly && !emailEnabled)}
+          aria-busy={pending || undefined}
         >
+          {pending && <span className="spinner" aria-hidden="true" />}
           {pending
             ? "Please wait…"
             : mode === "sign-in"
@@ -95,24 +121,32 @@ export default function AccountForm({
                     ? "Email me a sign-in link"
                     : "Save password"}
         </button>
-        {["forgot", "magic"].includes(mode) && !emailEnabled && (
-          <p>Authentication email is temporarily unavailable.</p>
+        {emailOnly && !emailEnabled && (
+          <p className="banner banner-info">
+            {mode === "magic"
+              ? "Email sign-in isn't available right now. Use your password instead."
+              : "Password reset email isn't available right now."}
+          </p>
         )}
       </form>
       {paypal && (
-        <button
-          className="merchant-secondary"
-          onClick={() => {
-            void authClient.signIn.social({
-              provider: "paypal",
-              callbackURL: "/m",
-              errorCallbackURL: "/sign-in",
-            });
-          }}
-        >
-          Log in with PayPal
-        </button>
+        <>
+          <p className="or-divider">or</p>
+          <button
+            type="button"
+            className="btn btn-secondary btn-lg btn-block"
+            onClick={() => {
+              void authClient.signIn.social({
+                provider: "paypal",
+                callbackURL: "/m",
+                errorCallbackURL: "/sign-in",
+              });
+            }}
+          >
+            Continue with PayPal
+          </button>
+        </>
       )}
-    </>
+    </div>
   );
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ownedMerchant, requireUser } from "@/lib/dal";
 import { cookies } from "next/headers";
+import { BrandLink } from "@/components/brand";
+import { Stepper } from "./stepper";
 export default async function WizardLayout({
   children,
 }: {
@@ -12,25 +14,26 @@ export default async function WizardLayout({
       (await ownedMerchant(user.id, selected)) ??
       (await ownedMerchant(user.id));
   return (
-    <>
-      <div className="wizard-heading">
-        <p className="pay-eyebrow">Set up your business</p>
-        <p>{merchant?.displayName ?? "New business"}</p>
-        <h1>Make coming back feel good.</h1>
-        <nav aria-label="Setup steps">
-          {["business", "connect", "history", "program", "menu"].map(
-            (step, index) => (
-              <Link key={step} href={`/m/onboarding/${step}`}>
-                {index + 1}.{" "}
-                {step === "menu"
-                  ? "Menu & sign"
-                  : step[0].toUpperCase() + step.slice(1)}
-              </Link>
-            ),
+    <div className="flex min-h-dvh flex-col">
+      <header className="setup-head">
+        <div className="setup-head-inner">
+          <div className="flex min-w-0 items-center gap-4">
+            <BrandLink href={merchant ? "/m" : "/"} size={20} withIcon />
+            <span className="caption truncate" style={{ fontSize: 14 }}>
+              Setting up {merchant?.displayName ?? "your business"}
+            </span>
+          </div>
+          {merchant && (
+            <Link href="/m" className="btn btn-ghost btn-sm">
+              Save and finish later
+            </Link>
           )}
-        </nav>
-      </div>
-      {children}
-    </>
+        </div>
+      </header>
+      <main id="main" className="setup-body flex-1">
+        <Stepper reached={merchant?.onboardingStep ?? "business"} />
+        {children}
+      </main>
+    </div>
   );
 }

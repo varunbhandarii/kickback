@@ -30,6 +30,7 @@ export async function submitMenu(
     };
   }
   revalidatePath(`/pay/${merchant.slug}`);
+  revalidatePath("/m/sign");
   if (form.get("finish") === "yes") redirect("/m");
   return { message: "Menu saved." };
 }

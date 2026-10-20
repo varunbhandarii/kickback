@@ -6,10 +6,14 @@ export const dynamic = "force-dynamic";
 export default function Forgot() {
   return (
     <>
-      <h1>Reset your password</h1>
-      <p>Enter the email you used for your merchant account.</p>
+      <div className="flex flex-col gap-1.5">
+        <h1 className="page-title">Reset your password</h1>
+        <p className="page-sub" style={{ fontSize: 15 }}>
+          Enter the email you used for your merchant account.
+        </p>
+      </div>
       <AccountForm mode="forgot" emailEnabled={emailConfigured()} />
-      <nav>
+      <nav aria-label="Account" style={{ fontSize: 14.5 }}>
         <Link href="/sign-in">Back to sign in</Link>
       </nav>
     </>

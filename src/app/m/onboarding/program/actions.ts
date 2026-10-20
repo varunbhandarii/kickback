@@ -66,5 +66,9 @@ export async function submitProgram(
         "Check your program amounts and limits, and confirm PayPal is connected before activating.",
     };
   }
-  redirect("/m/onboarding/menu");
+  redirect(
+    form.get("returnTo") === "program"
+      ? "/m/program?activated=1"
+      : "/m/onboarding/menu",
+  );
 }

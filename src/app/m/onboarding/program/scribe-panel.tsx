@@ -2,6 +2,7 @@
 import { useState, useTransition } from "react";
 import type { ProgramSpec } from "@/lib/engine/program";
 import { writeCopy } from "./ai-actions";
+import { Icon } from "@/components/icons";
 export default function ScribePanel({
   merchantId,
   spec,
@@ -14,15 +15,16 @@ export default function ScribePanel({
   const [error, setError] = useState(""),
     [pending, start] = useTransition();
   return (
-    <section className="merchant-card">
-      <h2>Thank-you copy</h2>
-      <p>
-        Generate six notes, a terms introduction and a sign pitch in your saved
-        voice. Copy becomes public only when you activate the program below.
+    <div className="flex flex-col gap-2">
+      <p className="text-2" style={{ fontSize: 14, lineHeight: 1.55 }}>
+        Generate six notes, a terms introduction and a sign pitch in your saved voice. Copy becomes public only when
+        you activate the program.
       </p>
       <button
         type="button"
+        className="btn btn-tint btn-sm self-start"
         disabled={pending}
+        aria-busy={pending || undefined}
         onClick={() =>
           start(async () => {
             setError("");
@@ -47,9 +49,14 @@ export default function ScribePanel({
           })
         }
       >
-        {pending ? "Writing and validating…" : "Generate or regenerate copy"}
+        {pending ? <span className="spinner" aria-hidden="true" /> : <Icon name="sparkles" size={14} />}
+        {pending ? "Writing and validating…" : "Write notes in your voice"}
       </button>
-      {error && <p role="status">{error}</p>}
-    </section>
+      {error && (
+        <p role="status" className="status-line">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

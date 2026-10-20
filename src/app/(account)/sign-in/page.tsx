@@ -13,20 +13,25 @@ export default async function SignIn({
   const { error } = await searchParams;
   return (
     <>
-      <h1>Welcome back</h1>
-      <p>Sign in to manage your business.</p>
+      <div className="flex flex-col gap-1.5">
+        <h1 className="page-title">Welcome back</h1>
+        <p className="page-sub" style={{ fontSize: 15 }}>
+          Sign in to manage your business.
+        </p>
+      </div>
       {error && (
-        <p role="alert" className="merchant-error">
+        <p role="alert" className="alert">
           {error === "email_not_found"
             ? "PayPal did not return an email address. Check the app's name and email permissions, or sign in with email and password."
             : "PayPal sign-in could not complete. Try again, or sign in with email and password."}
         </p>
       )}
       <AccountForm mode="sign-in" paypal={getEnv().PAYPAL_LOGIN_ENABLED} />
-      <nav>
-        <Link href="/forgot-password">Forgot password?</Link>
+      <nav aria-label="Other ways in" className="flex flex-col items-start gap-2" style={{ fontSize: 14.5 }}>
         <Link href="/magic-link">Email me a sign-in link</Link>
-        <Link href="/sign-up">Create an account</Link>
+        <span className="text-2">
+          New to Kickback? <Link href="/sign-up">Create an account</Link>
+        </span>
       </nav>
     </>
   );
