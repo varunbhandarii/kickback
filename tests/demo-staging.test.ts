@@ -155,6 +155,12 @@ describe("demo buyer staging and live runs", () => {
     expect(await reserveBuyer("pay", "pay:b")).toBeUndefined();
     expect(await reserveBuyer("watch", "run:x")).toBeUndefined();
     expect(await releaseExpired(new Date(Date.now() + 31 * 60000))).toBe(1);
+    // Without a published login, a pay buyer is never handed out (or held).
+    await getDb().update(demoBuyers).set({ status: "ready" });
+    expect(await reserveBuyer("pay", "pay:c", new Date(), [])).toBeUndefined();
+    expect(await reserveBuyer("pay", "pay:c", new Date(), ["someone-else@example.com"])).toBeUndefined();
+    expect((await reserveBuyer("pay", "pay:c", new Date(), ["kb-demo-1@example.com"]))?.slot).toBe(1);
+    await releaseExpired(new Date(Date.now() + 31 * 60000));
     const [row] = await getDb().select().from(demoBuyers).where(and(eq(demoBuyers.slot, 1)));
     expect(row).toMatchObject({ status: "cooling", reservedBy: null });
   });

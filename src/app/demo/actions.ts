@@ -82,8 +82,9 @@ export async function getDemoBuyer(): Promise<BuyerState> {
   if (closed) return { error: closed };
   const jar = await cookies(),
     holder = jar.get(DEMO_COOKIE)?.value ?? randomUUID();
-  const buyer = await reserveBuyer("pay", "pay:" + holder);
-  const password = buyer && publishedCredentials().get(buyer.email);
+  const logins = publishedCredentials();
+  const buyer = await reserveBuyer("pay", "pay:" + holder, new Date(), [...logins.keys()]);
+  const password = buyer && logins.get(buyer.email);
   if (!buyer || !password)
     return {
       error: "All demo buyers are in use right now. Try “Watch a reward happen”, or check back in a few minutes.",

@@ -128,7 +128,10 @@ export async function reserveBuyer(
   purpose: "pay" | "watch",
   holder: string,
   now = new Date(),
+  /** Pay buyers can only be handed out when their login is published. */
+  emails?: string[],
 ) {
+  if (emails && !emails.length) return undefined;
   return getDb().transaction(async (tx) => {
     const [held] = await tx
       .select()
@@ -150,6 +153,7 @@ export async function reserveBuyer(
           eq(demoBuyers.status, "ready"),
           isNotNull(demoBuyers.vaultEnc),
           ...(purpose === "pay" ? [eq(demoBuyers.published, true)] : []),
+          ...(emails ? [inArray(demoBuyers.email, emails)] : []),
         ),
       )
       .orderBy(
