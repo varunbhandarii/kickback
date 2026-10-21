@@ -2,8 +2,8 @@ export const metadata = {
   title: { absolute: "Kickback · Loyalty that pays customers back" },
 };
 import Link from "next/link";
-import { BrandLink, Wordmark } from "@/components/brand";
 import { Icon, type IconName } from "@/components/icons";
+import { SiteFooter, SiteHeader } from "@/components/site-chrome";
 import { PunchRow } from "@/components/ui";
 
 const steps = [
@@ -50,24 +50,7 @@ const features: { icon: IconName; title: string; body: string }[] = [
 export default function Home() {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="site-head">
-        <div className="site-head-inner">
-          <BrandLink size={24} withIcon />
-          <nav aria-label="Main" className="site-nav">
-            <a href="#how">How it works</a>
-            <a href="#merchants">For merchants</a>
-            <a href="#demo">Try the demo</a>
-          </nav>
-          <div className="flex items-center gap-2.5">
-            <Link href="/sign-in" className="btn btn-ghost">
-              Sign in
-            </Link>
-            <Link href="/sign-up" className="btn btn-primary">
-              Connect your business
-            </Link>
-          </div>
-        </div>
-      </header>
+      <SiteHeader home />
 
       <main className="flex-1">
         <section className="site-section-inner flex flex-wrap items-center gap-14" style={{ paddingBlock: "72px 80px" }}>
@@ -85,8 +68,8 @@ export default function Home() {
               <Link href="/sign-up" className="btn btn-primary btn-lg">
                 Connect your business
               </Link>
-              <Link href="/pay/rosas" className="btn btn-secondary btn-lg">
-                Try the demo cafe
+              <Link href="/demo" className="btn btn-secondary btn-lg">
+                Try the demo
                 <Icon name="arrowRight" size={16} />
               </Link>
             </div>
@@ -246,37 +229,28 @@ export default function Home() {
             >
               <div className="flex min-w-0 flex-col gap-3.5" style={{ flex: "1 1 420px" }}>
                 <h2 id="demo-title" className="display" style={{ fontStretch: "125%", fontWeight: 800, fontSize: "clamp(28px, 3.6vw, 44px)", lineHeight: 1.02 }}>
-                  Try Rosa&apos;s Cafe in two minutes.
+                  See it work in under a minute.
                 </h2>
                 <p className="band-sub" style={{ fontSize: 16, lineHeight: 1.6 }}>
-                  Pay with a PayPal sandbox buyer account, watch your card fill, and see the $2 refund arrive on the
-                  fifth visit. Test balances only.
+                  Watch a real sandbox payment earn a reward, pay as a customer with a demo buyer, or explore the
+                  merchant app read-only. Test balances only.
                 </p>
               </div>
-              <Link href="/pay/rosas" className="btn btn-on-band btn-lg flex-none">
-                Visit Rosa&apos;s Cafe
-                <Icon name="arrowRight" size={16} />
-              </Link>
+              <div className="flex flex-none flex-wrap items-center gap-3">
+                <Link href="/demo" className="btn btn-on-band btn-lg">
+                  Try the demo
+                  <Icon name="arrowRight" size={16} />
+                </Link>
+                <Link href="/pay/rosas" className="band-sub" style={{ fontSize: 15, fontWeight: 600, textDecoration: "underline" }}>
+                  Visit Rosa&apos;s Cafe
+                </Link>
+              </div>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-line bg-surface" style={{ paddingBlock: "32px 40px" }}>
-        <div className="site-section-inner flex flex-wrap items-center justify-between gap-x-10 gap-y-4">
-          <Wordmark size={20} />
-          <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2" style={{ fontSize: 14 }}>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/ai">How Kickback uses AI</Link>
-            <a href="/api/health">Service status</a>
-          </nav>
-          <p className="caption basis-full" style={{ fontSize: 13 }}>
-            Kickback runs in PayPal sandbox today and has not processed live money. PayPal and Venmo are trademarks
-            of PayPal, Inc.
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

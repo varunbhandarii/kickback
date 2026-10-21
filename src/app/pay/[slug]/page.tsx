@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { DEMO_COOKIE } from "@/lib/demo/accounts";
 import { loadMerchant, connectionContext } from "@/lib/merchants";
 import { getEnv } from "@/lib/env";
 import PayClient from "./pay-client";
@@ -42,6 +44,9 @@ export default async function PayPage({
       clientId={ctx?.clientId ?? ""}
       bnCode={env.PAYPAL_BN_CODE as string | undefined}
       sandbox={env.KICKBACK_ENV === "sandbox"}
+      demoReturn={
+        env.KICKBACK_ENV === "sandbox" && (await cookies()).has(DEMO_COOKIE)
+      }
     />
   );
 }

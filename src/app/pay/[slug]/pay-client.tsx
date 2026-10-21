@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import Script from "next/script";
 import {
   type CSSProperties,
@@ -60,6 +61,7 @@ export default function PayClient({
   clientId,
   bnCode,
   sandbox,
+  demoReturn = false,
 }: {
   slug: string;
   name: string;
@@ -69,6 +71,7 @@ export default function PayClient({
   clientId: string;
   bnCode?: string;
   sandbox: boolean;
+  demoReturn?: boolean;
 }) {
   const [ready, setReady] = useState(false),
     [item, setItem] = useState(menu[0]?.id ?? "other"),
@@ -445,6 +448,12 @@ export default function PayClient({
             <button type="button" className="btn btn-secondary btn-lg" onClick={startOver}>
               Make another payment
             </button>
+            {demoReturn && (
+              <Link href="/demo" className="btn btn-ghost">
+                <Icon name="arrowLeft" size={16} />
+                Back to the demo
+              </Link>
+            )}
           </>
         )}
         <div hidden={Boolean(result)} className="flex flex-col gap-5">
