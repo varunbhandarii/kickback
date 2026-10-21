@@ -73,11 +73,54 @@ export const envSchema = z
     TENANT_PURGE_HOURS: z.coerce.number().min(0.01).max(48).default(48),
     RECONCILE_INTERVAL_HOURS: z.coerce.number().min(0.01).max(24).default(6),
     BACKFILL_DAYS: z.coerce.number().int().min(1).max(90).default(90),
+    PUBLIC_SANDBOX_TOOLS: flag,
+    DEMO_VIEWER_PASSWORD: blankOptional(z.string().min(16)),
+    DEMO_RUNS_PER_DAY: z.coerce.number().int().min(0).max(500).default(30),
+    DEMO_PATHS_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((v) => v === "true"),
+    DEMO_BUYER_CREDENTIALS_JSON: blankOptional(),
+    PROTECTED_DEMO_SLUGS: z.string().default("rosas,salon,bakery"),
+    ALLOW_DEMO_TENANT_PURGE: flag,
+    AI_MAX_CALLS_GLOBAL_PER_DAY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100000)
+      .default(200),
+    AI_MAX_ANALYST_TURNS_GLOBAL_PER_DAY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100000)
+      .default(400),
+    AI_MAX_VIEWER_TURNS_PER_IP_PER_DAY: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(1000)
+      .default(15),
+    AI_MAX_VIEWER_TURNS_PER_DAY: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(10000)
+      .default(150),
+    BETTERSTACK_JOBS_HEARTBEAT_URL: blankOptional(z.url()),
+    BETTERSTACK_SOAK_HEARTBEAT_URL: blankOptional(z.url()),
+    BETTERSTACK_RECONCILE_HEARTBEAT_URL: blankOptional(z.url()),
+    STATUS_PAGE_URL: blankOptional(z.url()),
   })
   .superRefine((env, ctx) => {
     if (
       env.KICKBACK_ENV === "live" &&
-      (env.KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS || env.DEMO_MODE)
+      (env.KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS ||
+        env.DEMO_MODE ||
+        env.PUBLIC_SANDBOX_TOOLS ||
+        env.ALLOW_DEMO_TENANT_PURGE ||
+        env.DEMO_VIEWER_PASSWORD ||
+        env.DEMO_BUYER_CREDENTIALS_JSON)
     ) {
       ctx.addIssue({
         code: "custom",
@@ -114,4 +157,25 @@ export function sandboxToolsEnabled() {
   return (
     process.env.KICKBACK_ENV === "sandbox" && process.env.DEMO_MODE === "true"
   );
+}
+
+/** Public sandbox test pages and the env-merchant checkout path; off on the hosted demo. */
+export function publicSandboxTools() {
+  return sandboxToolsEnabled() && process.env.PUBLIC_SANDBOX_TOOLS === "true";
+}
+
+/** Demo shops that evaluators use; they cannot be disconnected or purged by accident. */
+/** Demo shops that disconnect and purge refuse, unless an operator sets ALLOW_DEMO_TENANT_PURGE. */
+export function demoTenantProtected(slug: string) {
+  return (
+    process.env.ALLOW_DEMO_TENANT_PURGE !== "true" &&
+    protectedDemoSlugs().includes(slug)
+  );
+}
+export function protectedDemoSlugs() {
+  if (process.env.KICKBACK_ENV !== "sandbox") return [];
+  return (process.env.PROTECTED_DEMO_SLUGS ?? "rosas,salon,bakery")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }

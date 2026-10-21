@@ -471,11 +471,15 @@ export const aiCalls = pgTable(
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     latencyMs: integer("latency_ms").notNull().default(0),
     requestId: text("request_id"),
+    // "owner" for the business itself, "viewer" for read-only demo visitors.
+    actorKind: text("actor_kind").notNull().default("owner"),
+    actorKey: text("actor_key"),
     createdAt: at("created_at").notNull().defaultNow(),
   },
   (t) => [
     index("ai_calls_quota_idx").on(t.merchantId, t.createdAt),
     index("ai_calls_run_idx").on(t.merchantId, t.runId),
+    index("ai_calls_day_idx").on(t.createdAt),
   ],
 );
 export const designRuns = pgTable("design_runs", {
@@ -627,4 +631,55 @@ export const aiUsage = pgTable(
     primaryKey({ columns: [t.merchantId, t.runId] }),
     index("ai_usage_retention_idx").on(t.finishedAt),
   ],
+);
+
+/** Sandbox buyers kept ready so evaluators can see a reward on their next payment. */
+export const demoBuyers = pgTable("demo_buyers", {
+  slot: integer("slot").primaryKey(),
+  merchantSlug: text("merchant_slug").notNull(),
+  email: text("email").notNull().unique(),
+  purpose: text("purpose").notNull().default("pay"),
+  published: boolean("published").notNull().default(true),
+  vaultEnc: text("vault_enc"),
+  customerKey: text("customer_key"),
+  status: text("status").notNull().default("cooling"),
+  reservedUntil: at("reserved_until"),
+  reservedBy: text("reserved_by"),
+  lastRewardAt: at("last_reward_at"),
+  lastStagedAt: at("last_staged_at"),
+  notes: text("notes"),
+  updatedAt: at("updated_at").notNull().defaultNow(),
+});
+/** One "watch a reward happen" run or soak step, with public progress. */
+export const demoRuns = pgTable(
+  "demo_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull().default("watch"),
+    ipHash: text("ip_hash"),
+    buyerSlot: integer("buyer_slot"),
+    state: text("state").notNull().default("queued"),
+    orderId: text("order_id"),
+    captureId: text("capture_id"),
+    rewardId: uuid("reward_id"),
+    refundId: text("refund_id"),
+    note: text("note"),
+    progress: jsonb("progress_json"),
+    error: text("error"),
+    createdAt: at("created_at").notNull().defaultNow(),
+    finishedAt: at("finished_at"),
+  },
+  (t) => [index("demo_runs_created_idx").on(t.createdAt)],
+);
+export const soakRuns = pgTable(
+  "soak_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    startedAt: at("started_at").notNull().defaultNow(),
+    finishedAt: at("finished_at"),
+    ok: boolean("ok").notNull().default(false),
+    steps: jsonb("steps").notNull().default([]),
+    failure: text("failure"),
+  },
+  (t) => [index("soak_runs_started_idx").on(t.startedAt)],
 );

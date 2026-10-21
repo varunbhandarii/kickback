@@ -92,6 +92,13 @@
       "idx": 12,
       "tag": "0012_analyst_usage",
       "breakpoints": true
+    },
+    {
+      "when": 1792400000000,
+      "version": "7",
+      "idx": 13,
+      "tag": "0013_demo_mode",
+      "breakpoints": true
     }
   ]
 }
