@@ -213,7 +213,7 @@ it("labels Cockpit tabs and toolbar controls", async () => {
             model: "test",
           }}
           invalidState={false}
-          ai={false}
+          aiOff="connect"
         />
       </main>,
     ),

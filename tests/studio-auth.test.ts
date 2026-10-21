@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/dal", () => ({
   getSession: mocks.session,
-  ownedMerchant: mocks.owned,
+  memberMerchant: mocks.owned,
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.cookie }),
@@ -33,13 +33,13 @@ describe("Studio API authentication", () => {
     await expect(
       apiActor(new Request("https://app.test")),
     ).rejects.toMatchObject({ status: 401 });
-    mocks.session.mockResolvedValue({ user: { id: "owner" } });
+    mocks.session.mockResolvedValue({ user: { id: "owner" }, session: { id: "s1" } });
     mocks.cookie.mockReturnValue({ value: "foreign" });
     mocks.owned.mockResolvedValue(undefined);
     await expect(
       apiActor(new Request("https://app.test")),
     ).rejects.toMatchObject({ status: 403 });
-    expect(mocks.owned).toHaveBeenLastCalledWith("owner", "foreign");
+    expect(mocks.owned).toHaveBeenLastCalledWith("owner", "foreign", ["OWNER"]);
   });
   it("rejects origin mismatches", async () => {
     await expect(

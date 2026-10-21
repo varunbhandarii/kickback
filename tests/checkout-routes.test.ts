@@ -16,7 +16,7 @@ const orderId = "ORDER123456789";
 const origin = "https://app.test";
 const post = (body: unknown, requestOrigin = origin) => new Request(`${origin}/api/pay/capture-order`, { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
 beforeEach(() => {
-  for (const [key, value] of Object.entries({ APP_URL: origin, KICKBACK_ENV: "sandbox", DATABASE_URL: "postgres://test:test@localhost/test", PAYPAL_CLIENT_ID: "client", PAYPAL_CLIENT_SECRET: "secret", KICKBACK_MASTER_KEY: Buffer.alloc(32, 1).toString("base64"), JOBS_BEARER: "a".repeat(32), DEMO_MODE: "true", KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS: "false" })) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries({ APP_URL: origin, KICKBACK_ENV: "sandbox", DATABASE_URL: "postgres://test:test@localhost/test", PAYPAL_CLIENT_ID: "client", PAYPAL_CLIENT_SECRET: "secret", KICKBACK_MASTER_KEY: Buffer.alloc(32, 1).toString("base64"), JOBS_BEARER: "a".repeat(32), DEMO_MODE: "true", PUBLIC_SANDBOX_TOOLS: "true", KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS: "false" })) vi.stubEnv(key, value);
   requestPayPal.mockResolvedValue({ id: orderId, status: "COMPLETED", payment_source: { paypal: { account_id: "BUYER123" } }, purchase_units: [{ payments: { captures: [{ id: "CAPTURE123", status: "COMPLETED", amount: { value: "10.00", currency_code: "USD" } }] } }] });
   createPayPal.mockResolvedValue({ id: orderId });
 });
@@ -40,6 +40,9 @@ describe("sandbox checkout API", () => {
   });
   it("rejects cross-origin requests and disabled sandbox routes", async () => {
     expect((await create(post({}, "https://other.test"))).status).toBe(403);
+    vi.stubEnv("PUBLIC_SANDBOX_TOOLS", "false");
+    expect((await create(post({}))).status).toBe(404);
+    vi.stubEnv("PUBLIC_SANDBOX_TOOLS", "true");
     vi.stubEnv("DEMO_MODE", "false");
     expect((await create(post({}))).status).toBe(404);
     expect(createPayPal).not.toHaveBeenCalled();

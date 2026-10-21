@@ -24,6 +24,8 @@ export async function setupDb() {
     KICKBACK_MASTER_KEY: Buffer.alloc(32, 1).toString("base64"),
     JOBS_BEARER: "x".repeat(32),
     DATABASE_URL: "postgres://test:test@localhost/test",
+    // Tests that cover demo-tenant protection opt in by setting this.
+    PROTECTED_DEMO_SLUGS: "",
   }))
     vi.stubEnv(key, value);
   pg = new PGlite();

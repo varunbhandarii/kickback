@@ -44,7 +44,7 @@ describe("Cockpit storage lifecycle", () => {
     await getDb()
       .insert(user)
       .values({ id, name: "Owner", email: id + "@example.com" });
-    actor.current.mockResolvedValue({ merchant, user: { id } });
+    actor.current.mockResolvedValue({ merchant, user: { id }, role: "OWNER" });
   });
   afterAll(teardownDb);
   it("upserts a layout once and audits without its body", async () => {
