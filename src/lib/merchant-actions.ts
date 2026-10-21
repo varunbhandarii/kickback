@@ -14,7 +14,7 @@ import {
 import { assertConnectionOwner } from "./connections";
 import { lockCustomer, lockMerchant } from "./ledger/locks";
 import { audit } from "./audit";
-import { getEnv } from "./env";
+import { demoTenantProtected, getEnv } from "./env";
 import { forgetConnection } from "./merchants";
 import { loadProgram } from "./engine/program";
 import { enqueue } from "./rewards/enqueue";
@@ -86,9 +86,17 @@ export async function disconnectTx(
   );
   return purgeAfter;
 }
+export class ProtectedDemoTenant extends Error {}
 export async function disconnectMerchant(userId: string, merchantId: string) {
   return getDb().transaction(async (tx) => {
     await assertConnectionOwner(tx, userId, merchantId);
+    const [merchant] = await tx
+      .select({ slug: merchants.slug })
+      .from(merchants)
+      .where(eq(merchants.id, merchantId));
+    // A disconnect starts the purge clock; the shared demo shops must survive it.
+    if (merchant && demoTenantProtected(merchant.slug))
+      throw new ProtectedDemoTenant("PROTECTED_DEMO_TENANT");
     return disconnectTx(tx, merchantId);
   });
 }

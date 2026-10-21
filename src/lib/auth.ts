@@ -1,7 +1,18 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { nextCookies } from "better-auth/next-js";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import {
+  APIError,
+  createAuthMiddleware,
+  getSessionFromCtx,
+} from "better-auth/api";
+import {
+  DEMO_LOCKED_AUTH_PATHS,
+  DEMO_SIGN_IN_HEADER,
+  DEMO_VIEWER_EMAIL,
+  demoSignInToken,
+  isDemoEmail,
+} from "./demo/accounts";
 import { magicLink } from "better-auth/plugins";
 import { getDb } from "@/db";
 import * as schema from "@/db/schema";
@@ -117,6 +128,22 @@ export function createMerchantAuth(database = getDb(), env = getEnv()) {
           throw new APIError("SERVICE_UNAVAILABLE", {
             message: "Email is unavailable",
           });
+        // The read-only demo account signs in only through the demo page's server action,
+        // so failed public attempts can never lock it.
+        if (
+          ctx.path === "/sign-in/email" &&
+          typeof ctx.body?.email === "string" &&
+          ctx.body.email.trim().toLowerCase() === DEMO_VIEWER_EMAIL
+        ) {
+          if (
+            ctx.headers?.get(DEMO_SIGN_IN_HEADER) !==
+            demoSignInToken(env.BETTER_AUTH_SECRET!)
+          )
+            throw new APIError("FORBIDDEN", {
+              message: "Use the demo page to explore",
+            });
+          return;
+        }
         if (
           ctx.path === "/sign-in/email" &&
           typeof ctx.body?.email === "string" &&
@@ -124,6 +151,26 @@ export function createMerchantAuth(database = getDb(), env = getEnv()) {
         )
           throw new APIError("TOO_MANY_REQUESTS", {
             message: "Unable to sign in. Try again later.",
+          });
+        // Shared demo accounts cannot be changed, locked or signed out globally.
+        if (
+          DEMO_LOCKED_AUTH_PATHS.includes(ctx.path) &&
+          isDemoEmail((await getSessionFromCtx(ctx).catch(() => null))?.user?.email)
+        )
+          throw new APIError("FORBIDDEN", {
+            message: "The demo account cannot be changed",
+          });
+        if (
+          [
+            "/sign-up/email",
+            "/sign-in/magic-link",
+            "/request-password-reset",
+            "/forget-password",
+          ].includes(ctx.path) &&
+          isDemoEmail(typeof ctx.body?.email === "string" ? ctx.body.email : "")
+        )
+          throw new APIError("FORBIDDEN", {
+            message: "This email is reserved",
           });
       }),
       after: createAuthMiddleware(async (ctx) => {

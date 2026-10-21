@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   account,
@@ -9,11 +9,12 @@ import {
   programs,
   type MenuItem,
 } from "@/db/schema";
-import { hashPassword } from "better-auth/crypto";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { randomUUID } from "node:crypto";
 import { encryptSecret } from "../crypto/tenant";
 import { defaultProgram, loadProgram } from "../engine/program";
 import { getEnv } from "../env";
+import { DEMO_OWNER_EMAIL, DEMO_VIEWER_EMAIL } from "../demo/accounts";
 const demos = [
   {
     slug: "rosas",
@@ -65,49 +66,82 @@ const demos = [
     },
   },
 ];
+/** Creates a password account once; `rotate` keeps a server-held password in step with env. */
+async function credentialUser(
+  email: string,
+  name: string,
+  plain: string,
+  rotate = false,
+) {
+  const [found] = await getDb().select().from(user).where(eq(user.email, email));
+  if (found) {
+    if (rotate) {
+      const [credential] = await getDb()
+        .select()
+        .from(account)
+        .where(
+          and(eq(account.userId, found.id), eq(account.providerId, "credential")),
+        );
+      if (
+        credential?.password &&
+        !(await verifyPassword({ hash: credential.password, password: plain }))
+      )
+        await getDb()
+          .update(account)
+          .set({ password: await hashPassword(plain), updatedAt: new Date() })
+          .where(eq(account.id, credential.id));
+    }
+    return found;
+  }
+  const password = await hashPassword(plain),
+    id = randomUUID();
+  return getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .insert(user)
+      .values({
+        id,
+        name,
+        email,
+        emailVerified: true,
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!row)
+      return (await tx.select().from(user).where(eq(user.email, email)))[0];
+    await tx.insert(account).values({
+      id: randomUUID(),
+      accountId: id,
+      userId: id,
+      providerId: "credential",
+      password,
+      updatedAt: new Date(),
+    });
+    return row;
+  });
+}
 export async function seedDemo() {
   const env = getEnv(),
-    seeded: string[] = [];
+    seeded: string[] = [],
+    skipped: { slug: string; reason: string }[] = [];
   if (env.KICKBACK_ENV !== "sandbox")
     throw new Error("Demo seed requires sandbox");
   if (!env.DEMO_USER_PASSWORD)
     throw new Error("Set DEMO_USER_PASSWORD using npm run env:init");
-  let [owner] = await getDb()
-    .select()
-    .from(user)
-    .where(eq(user.email, "demo@kickback.local"));
-  if (!owner) {
-    const password = await hashPassword(env.DEMO_USER_PASSWORD),
-      id = randomUUID();
-    owner = await getDb().transaction(async (tx) => {
-      const [row] = await tx
-        .insert(user)
-        .values({
-          id,
-          name: "Demo merchant",
-          email: "demo@kickback.local",
-          updatedAt: new Date(),
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (!row)
-        return (
-          await tx
-            .select()
-            .from(user)
-            .where(eq(user.email, "demo@kickback.local"))
-        )[0];
-      await tx.insert(account).values({
-        id: randomUUID(),
-        accountId: id,
-        userId: id,
-        providerId: "credential",
-        password,
-        updatedAt: new Date(),
-      });
-      return row;
-    });
-  }
+  const owner = await credentialUser(
+    DEMO_OWNER_EMAIL,
+    "Demo merchant",
+    env.DEMO_USER_PASSWORD,
+  );
+  // The read-only visitor account; its password never leaves the server.
+  const viewer = env.DEMO_VIEWER_PASSWORD
+    ? await credentialUser(
+        DEMO_VIEWER_EMAIL,
+        "Demo visitor",
+        env.DEMO_VIEWER_PASSWORD,
+        true,
+      )
+    : undefined;
   for (const demo of demos) {
     const id = process.env[`MERCHANT_${demo.prefix}_ID`];
     if (!id || !/^[A-Z0-9]{13}$/.test(id))
@@ -143,7 +177,18 @@ export async function seedDemo() {
         .insert(merchantUsers)
         .values({ userId: owner.id, merchantId: merchant.id })
         .onConflictDoNothing();
-      if (merchant.status === "DISCONNECTED" || merchant.purgeAfter) return;
+      if (viewer)
+        await tx
+          .insert(merchantUsers)
+          .values({ userId: viewer.id, merchantId: merchant.id, role: "VIEWER" })
+          .onConflictDoNothing();
+      if (merchant.status === "DISCONNECTED" || merchant.purgeAfter) {
+        skipped.push({
+          slug: demo.slug,
+          reason: merchant.purgeAfter ? "scheduled for deletion" : "disconnected",
+        });
+        return;
+      }
       const [old] = await tx
         .select()
         .from(connections)
@@ -206,7 +251,7 @@ export async function seedDemo() {
             .set({ effectiveFrom: new Date(0) })
             .where(eq(programs.id, program.id));
     });
-    seeded.push(demo.slug);
+    if (!skipped.some((s) => s.slug === demo.slug)) seeded.push(demo.slug);
   }
-  return { seeded };
+  return { seeded, skipped, viewer: Boolean(viewer) };
 }

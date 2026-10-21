@@ -4,7 +4,19 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { emailConfigured } from "@/lib/email";
+import { allowRequestPer, headerIp } from "@/lib/rate-limit";
 export type AuthState = { error?: string; message?: string };
+const MINUTE = 60000;
+/** Per-IP limits for the account forms (server actions bypass Better Auth's HTTP limiter). */
+async function ipAllowed(action: string, rules: [number, number][]) {
+  const ip = headerIp(await headers());
+  return rules.every(([capacity, windowMs]) =>
+    allowRequestPer(`auth:${action}:${ip}`, capacity, windowMs),
+  );
+}
+const busy = {
+  error: "Too many attempts from this network. Wait a few minutes and try again.",
+};
 const email = z
   .email()
   .max(254)
@@ -17,6 +29,7 @@ export async function signIn(
     .object({ email, password: z.string().min(1).max(128) })
     .safeParse(Object.fromEntries(form));
   if (!input.success) return { error: "Invalid email or password." };
+  if (!(await ipAllowed("sign-in", [[10, 10 * MINUTE]]))) return busy;
   try {
     await auth.api.signInEmail({ body: input.data, headers: await headers() });
   } catch {
@@ -43,6 +56,8 @@ export async function signUp(
       error:
         "Enter your name, a valid email, and a password of at least 10 characters.",
     };
+  if (!(await ipAllowed("sign-up", [[5, 10 * MINUTE], [30, 1440 * MINUTE]])))
+    return busy;
   try {
     await auth.api.signUpEmail({ body: input.data, headers: await headers() });
   } catch {
@@ -62,6 +77,7 @@ export async function requestReset(
 ): Promise<AuthState> {
   if (!emailConfigured())
     return { error: "Password reset email is temporarily unavailable." };
+  if (!(await ipAllowed("reset", [[3, 10 * MINUTE]]))) return busy;
   const parsed = email.safeParse(form.get("email"));
   if (parsed.success)
     try {
@@ -83,6 +99,7 @@ export async function requestMagicLink(
 ): Promise<AuthState> {
   if (!emailConfigured())
     return { error: "Sign-in email is temporarily unavailable." };
+  if (!(await ipAllowed("magic", [[3, 10 * MINUTE]]))) return busy;
   const parsed = email.safeParse(form.get("email"));
   if (parsed.success)
     try {

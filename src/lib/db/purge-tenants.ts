@@ -26,17 +26,26 @@ import {
   cockpitThreads,
   aiTurnCache,
   digests,
+  demoRuns,
+  soakRuns,
 } from "@/db/schema";
 import { audit } from "../audit";
 import { lockMerchant } from "../ledger/locks";
 import { forgetConnection } from "../merchants";
+import { demoTenantProtected } from "../env";
 export async function purgeTenants(now = new Date()) {
   const due = await getDb()
     .select()
     .from(merchants)
     .where(lt(merchants.purgeAfter, now));
   let purged = 0;
-  for (const merchant of due)
+  for (const merchant of due) {
+    if (demoTenantProtected(merchant.slug)) {
+      console.error(
+        JSON.stringify({ action: "demo_tenant_purge_skipped", slug: merchant.slug }),
+      );
+      continue;
+    }
     await getDb().transaction(async (tx) => {
       await lockMerchant(tx, merchant.id);
       const [current] = await tx
@@ -154,6 +163,7 @@ export async function purgeTenants(now = new Date()) {
       forgetConnection(merchant.id);
       purged++;
     });
+  }
   return purged;
 }
 export async function purgeOperationalMetadata(now = new Date()) {
@@ -214,6 +224,20 @@ export async function purgeOperationalMetadata(now = new Date()) {
   await getDb()
     .delete(aiCalls)
     .where(lt(aiCalls.createdAt, new Date(+now - 90 * 86400000)));
+  await getDb()
+    .delete(demoRuns)
+    .where(lt(demoRuns.createdAt, new Date(+now - 30 * 86400000)));
+  await getDb()
+    .delete(soakRuns)
+    .where(lt(soakRuns.startedAt, new Date(+now - 30 * 86400000)));
+  await getDb()
+    .delete(settings)
+    .where(
+      and(
+        sql`${settings.key} like 'paypal_429:%'`,
+        lt(settings.updatedAt, new Date(+now - 2 * 86400000)),
+      ),
+    );
   await getDb().execute(
     sql`delete from ai_usage where finished_at<${new Date(+now - 90 * 86400000).toISOString()}::timestamptz`,
   );

@@ -2,6 +2,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireUser, ownedMerchant } from "@/lib/dal";
+import { isDemoEmail } from "@/lib/demo/accounts";
 import { saveBusiness } from "@/lib/onboarding";
 import { slugFromName } from "@/lib/merchant-inputs";
 import { getEnv } from "@/lib/env";
@@ -12,6 +13,8 @@ export async function submitBusiness(
 ): Promise<BusinessState> {
   const user = await requireUser(),
     selected = String(form.get("merchantId") ?? "");
+  if (isDemoEmail(user.email))
+    return { error: "The demo account cannot create or change a business." };
   const existing = selected
     ? await ownedMerchant(user.id, selected)
     : undefined;

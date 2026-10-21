@@ -6,6 +6,7 @@ if (existsSync(".env")) {
   for (const [key, value] of Object.entries({
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
     DEMO_USER_PASSWORD: randomBytes(18).toString("base64url"),
+    DEMO_VIEWER_PASSWORD: randomBytes(24).toString("base64url"),
   })) {
     const pattern = new RegExp(`^${key}=.*$`, "m");
     if (!pattern.test(text)) {
@@ -40,6 +41,10 @@ if (existsSync(".env")) {
       .replace(
         /^DEMO_USER_PASSWORD=$/m,
         `DEMO_USER_PASSWORD=${randomBytes(18).toString("base64url")}`,
+      )
+      .replace(
+        /^DEMO_VIEWER_PASSWORD=$/m,
+        `DEMO_VIEWER_PASSWORD=${randomBytes(24).toString("base64url")}`,
       ),
     { mode: 0o600 },
   );

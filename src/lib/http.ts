@@ -1,10 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { ZodError } from "zod";
 import { PayPalApiError } from "./paypal/client";
-import { getEnv, sandboxToolsEnabled } from "./env";
+import { getEnv, publicSandboxTools } from "./env";
 
 export function requireSandboxTools(request: Request) {
-  if (!sandboxToolsEnabled()) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!publicSandboxTools()) return Response.json({ error: "Not found" }, { status: 404 });
   return requireOrigin(request);
 }
 export function requireOrigin(request: Request) {

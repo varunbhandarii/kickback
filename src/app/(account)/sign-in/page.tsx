@@ -32,6 +32,9 @@ export default async function SignIn({
         <span className="text-2">
           New to Kickback? <Link href="/sign-up">Create an account</Link>
         </span>
+        <span className="text-2">
+          Just looking? <Link href="/demo">Explore the read-only demo</Link>
+        </span>
       </nav>
     </>
   );

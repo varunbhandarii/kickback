@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { disconnectTx } from "./merchant-actions";
 import { lockMerchant } from "./ledger/locks";
+import { isDemoEmail } from "./demo/accounts";
 export async function deleteMerchantAccount(
   userId: string,
   password: string,
@@ -35,7 +36,7 @@ export async function deleteMerchantAccount(
       .from(user)
       .where(eq(user.id, userId))
       .for("update");
-    if (!person || person.email === "demo@kickback.local")
+    if (!person || isDemoEmail(person.email))
       throw new Error("This demo account cannot be deleted");
     const memberships = await tx
       .select()

@@ -1,6 +1,6 @@
 export const metadata = { title: "Sandbox checkout" };
 import { notFound } from "next/navigation";
-import { sandboxToolsEnabled, getEnv } from "@/lib/env";
+import { publicSandboxTools, getEnv } from "@/lib/env";
 import { merchantContext, merchantName } from "@/lib/paypal/merchants";
 import PayTest from "./pay-test";
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export default async function Page({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!sandboxToolsEnabled()) notFound();
+  if (!publicSandboxTools()) notFound();
   const params = await searchParams;
   const name = merchantName.safeParse(params.merchant ?? "platform");
   if (!name.success) notFound();

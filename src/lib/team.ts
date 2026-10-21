@@ -9,6 +9,7 @@ import { emailConfigured, sendMerchantEmail } from "./email";
 import { getEnv } from "./env";
 import { lockMerchant } from "./ledger/locks";
 import { audit } from "./audit";
+import { isDemoEmail } from "./demo/accounts";
 type Invite = { emailHash: string; expiresAt: string; invitedBy: string };
 const emailSchema = z
   .email()
@@ -23,8 +24,10 @@ export async function inviteOwner(
 ) {
   if (!emailConfigured())
     throw new Error("Set up merchant email before inviting an owner");
-  const email = emailSchema.parse(emailInput),
-    token = randomBytes(32).toString("base64url"),
+  const email = emailSchema.parse(emailInput);
+  // Shared demo identities are signed in by the public; they can never be owners.
+  if (isDemoEmail(email)) throw new Error("Demo accounts cannot be invited");
+  const token = randomBytes(32).toString("base64url"),
     key = inviteKey(merchantId, token);
   const merchant = await getDb().transaction(async (tx) => {
     await assertConnectionOwner(tx, userId, merchantId);
