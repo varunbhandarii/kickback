@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getEnv } from "../env";
 import { authAssertion } from "./auth";
-import { paceRequest, type Priority } from "./pacing";
+import { noteThrottle, paceRequest, type Priority } from "./pacing";
 export { paceRequest } from "./pacing";
 
 type ErrorBody = { name?: string; message?: string; debug_id?: string; details?: { issue?: string; description?: string; field?: string }[] };
@@ -28,7 +28,7 @@ export type PayPalOptions = {
   deadline?: number;
 };
 type Config = { clientId: string; clientSecret: string; environment: "sandbox" | "live"; bnCode?: string; retries?: number };
-type Dependencies = { fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: () => number; pace?: (priority?: Priority, deadline?: number) => Promise<void> };
+type Dependencies = { fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; now?: () => number; pace?: (priority?: Priority, deadline?: number) => Promise<void>; onThrottle?: () => void };
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function createPayPalClient(config: Config, deps: Dependencies = {}) {
@@ -52,6 +52,8 @@ export function createPayPalClient(config: Config, deps: Dependencies = {}) {
         await wait(Math.min(500 * 2 ** attempt,deadline ? Math.max(0,deadline-now()) : 4000));
         continue;
       }
+      // Injected pacing (tests, tools) keeps the shared scheduler out of it.
+      if (response.status === 429) (deps.onThrottle ?? (deps.pace ? undefined : noteThrottle))?.();
       if ((response.status === 409 || response.status === 429 || response.status >= 500) && attempt < (config.retries ?? 3)) {
         const retryAfter = response.headers.get("retry-after");
         const seconds = retryAfter === null ? NaN : Number(retryAfter);

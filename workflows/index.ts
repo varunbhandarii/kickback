@@ -6,6 +6,7 @@ import { merchants, connections } from "../src/db/schema";
 import { reconcileMerchant as reconcile } from "../src/lib/history/worker";
 import { weeklyDigests } from "../src/lib/digests";
 import { SEARCH_SCOPE } from "../src/lib/connections";
+import { beat } from "../src/lib/heartbeat";
 const retry = { maxRetries: 2, waitDurationMs: 10000, backoffScaling: 2 };
 export const reconcileMerchant = task(
   { name: "reconcileMerchant", timeoutSeconds: 900, retry, plan: "flex" },
@@ -44,6 +45,8 @@ export const nightlyReconcile = task(
         failed,
       }),
     );
+    if (!failed)
+      await beat("reconcile", process.env.BETTERSTACK_RECONCILE_HEARTBEAT_URL || undefined);
     return { merchants: ids.length, failed };
   },
 );

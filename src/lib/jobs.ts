@@ -11,6 +11,10 @@ import { refreshNotices } from "./guard/notices";
 import { weeklySuggestions } from "./ai/weekly";
 import { weeklyDigests } from "./digests";
 import { triggerReconcile } from "./workflow-trigger";
+import { stageDemoBuyers } from "./demo/staging";
+import { runSoak, soakDue } from "./demo/soak";
+import { beat } from "./heartbeat";
+import { getEnv } from "./env";
 export async function runJobs() {
   const started = Date.now(),
     deadline = started + 45000;
@@ -50,6 +54,20 @@ export async function runJobs() {
     console.error(
       JSON.stringify({ action: "retention_overdue", count: overdue.count }),
     );
+  // Demo upkeep gets its own time budget so it never crowds out payouts.
+  const staging = await stageDemoBuyers(new Date(), Date.now() + 40000).catch(
+    (e: unknown) => {
+      console.error(
+        JSON.stringify({
+          action: "demo_staging_failed",
+          error: e instanceof Error ? e.name : "unknown",
+        }),
+      );
+      return { failed: true };
+    },
+  );
+  await beat("jobs", getEnv().BETTERSTACK_JOBS_HEARTBEAT_URL);
+  const soak = (await soakDue()) ? await runSoak() : undefined;
   return {
     ok: true,
     stale,
@@ -65,6 +83,8 @@ export async function runJobs() {
     digests,
     deleted,
     retentionOverdue: overdue.count,
+    staging,
+    soak: soak ? { ok: soak.ok } : undefined,
     elapsedMs: Date.now() - started,
   };
 }

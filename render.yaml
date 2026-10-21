@@ -14,6 +14,18 @@ services:
       - fromGroup: kickback-shared
       - key: PG_POOL_MAX
         value: "5"
+      # PayPal's sandbox limits requests per IP; web, cron and workflows share 45/min.
+      - key: PAYPAL_RATE_PER_MIN
+        value: "28"
+      - key: PUBLIC_SANDBOX_TOOLS
+        value: "false"
+      # Server-only password for the read-only demo account; nobody needs to know it.
+      - key: DEMO_VIEWER_PASSWORD
+        generateValue: true
+      - key: DEMO_BUYER_CREDENTIALS_JSON
+        sync: false
+      - key: STATUS_PAGE_URL
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: kickback-db
@@ -86,6 +98,12 @@ services:
       - fromGroup: kickback-shared
       - key: PG_POOL_MAX
         value: "2"
+      - key: PAYPAL_RATE_PER_MIN
+        value: "12"
+      - key: BETTERSTACK_JOBS_HEARTBEAT_URL
+        sync: false
+      - key: BETTERSTACK_SOAK_HEARTBEAT_URL
+        sync: false
       - key: RENDER_API_KEY
         sync: false
       - key: WORKFLOW_SLUG
@@ -103,6 +121,10 @@ services:
       - fromGroup: kickback-shared
       - key: PG_POOL_MAX
         value: "2"
+      - key: PAYPAL_RATE_PER_MIN
+        value: "5"
+      - key: BETTERSTACK_RECONCILE_HEARTBEAT_URL
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: kickback-db
