@@ -9,9 +9,9 @@ import { loadThread, saveThread, deleteThread } from "@/lib/studio/threads";
 type Context = { params: Promise<{ id: string }> };
 export async function GET(req: Request, { params }: Context) {
   try {
-    const a = await apiActor(req),
+    const a = await apiActor(req, { allowViewer: true }),
       { id } = await params,
-      t = await loadThread(a.merchantId, id);
+      t = a.role === "OWNER" ? await loadThread(a.merchantId, id) : undefined;
     return t ? privateJson(t) : privateJson({ error: "Thread not found" }, 404);
   } catch (e) {
     return apiFailure(e);
@@ -19,9 +19,10 @@ export async function GET(req: Request, { params }: Context) {
 }
 export async function PUT(req: Request, { params }: Context) {
   try {
-    const a = await apiActor(req),
-      { id } = await params;
-    await saveThread(a.merchantId, id, await readJson(req));
+    const a = await apiActor(req, { allowViewer: true }),
+      { id } = await params,
+      body = await readJson(req);
+    if (a.role === "OWNER") await saveThread(a.merchantId, id, body);
     return privateJson({ ok: true });
   } catch (e) {
     return e instanceof z.ZodError
@@ -31,9 +32,9 @@ export async function PUT(req: Request, { params }: Context) {
 }
 export async function DELETE(req: Request, { params }: Context) {
   try {
-    const a = await apiActor(req),
+    const a = await apiActor(req, { allowViewer: true }),
       { id } = await params;
-    await deleteThread(a.merchantId, id);
+    if (a.role === "OWNER") await deleteThread(a.merchantId, id);
     return privateJson({ ok: true });
   } catch (e) {
     return apiFailure(e);

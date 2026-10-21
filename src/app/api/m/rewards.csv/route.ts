@@ -2,7 +2,10 @@ import { apiActor, apiFailure, ApiError } from "@/lib/studio/api-actor";
 import { rewardsCsv } from "@/lib/rewards/csv";
 export async function GET(req: Request) {
   try {
-    const a = await apiActor(req),
+    const a = await apiActor(req, {
+        allowViewer: true,
+        perMinute: ["rewards-csv", 10],
+      }),
       raw =
         new URL(req.url).searchParams.get("year") ??
         String(new Date().getUTCFullYear());

@@ -5,7 +5,8 @@ import { customers, guardFlags, merchants, rewards, visits } from "@/db/schema";
 import { programSchema, loadProgram } from "../engine/program";
 import { simulate, quantile } from "../engine/simulate";
 import { loadMerchant } from "../merchants";
-import { assertOwner } from "./service";
+import { assertMember } from "./service";
+import type { Role } from "../dal";
 import { designData, prior } from "./designer/context";
 import { designInputSchema, designPipeline } from "./designer/pipeline";
 import { programMetrics } from "../guard/notices";
@@ -36,6 +37,9 @@ export const analystToolDefinitions = Object.entries(toolSchemas).map(
     input_schema: z.toJSONSchema(schema),
   }),
 );
+/** Every tool reads; design_program also records a proposal, so it stays owner-only. */
+export const toolRoles = (name: string): Role[] =>
+  name === "design_program" ? ["OWNER"] : ["OWNER", "VIEWER"];
 export async function executeAnalystTool(
   name: keyof typeof toolSchemas,
   input: unknown,
@@ -44,7 +48,7 @@ export async function executeAnalystTool(
   const parsed = toolSchemas[name].parse(input);
   if (parsed.merchantId !== actor.merchantId)
     throw new Error("TENANT_MISMATCH");
-  await assertOwner(actor.userId, actor.merchantId);
+  await assertMember(actor.userId, actor.merchantId, toolRoles(name));
   const [business] = await getDb()
       .select()
       .from(merchants)

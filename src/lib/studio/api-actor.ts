@@ -1,7 +1,9 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { getSession, ownedMerchant } from "../dal";
+import { getSession, memberMerchant, type Role } from "../dal";
 import { getEnv } from "../env";
+import { viewerKey } from "../demo/accounts";
+import { allowRequest, clientIp } from "../rate-limit";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -10,7 +12,13 @@ export class ApiError extends Error {
     super(message);
   }
 }
-export async function apiActor(req: Request) {
+type ActorOptions = {
+  /** Let read-only demo visitors through (reads and the Analyst only). */
+  allowViewer?: boolean;
+  /** Per-session requests per minute for this route. */
+  perMinute?: [name: string, limit: number];
+};
+export async function apiActor(req: Request, options: ActorOptions = {}) {
   const site = req.headers.get("sec-fetch-site");
   if (site && !["same-origin", "none"].includes(site))
     throw new ApiError(403, "Cross-site request rejected");
@@ -19,11 +27,32 @@ export async function apiActor(req: Request) {
     throw new ApiError(403, "Origin rejected");
   const session = await getSession();
   if (!session) throw new ApiError(401, "Sign in required");
-  const selected = (await cookies()).get("kickback.merchant")?.value;
-  const merchant = await ownedMerchant(session.user.id, selected);
+  if (
+    options.perMinute &&
+    !allowRequest(
+      `api:${options.perMinute[0]}:${session.session.id}`,
+      options.perMinute[1],
+    )
+  )
+    throw new ApiError(429, "Too many requests. Try again in a minute.");
+  const selected = (await cookies()).get("kickback.merchant")?.value,
+    roles: Role[] = options.allowViewer ? ["OWNER", "VIEWER"] : ["OWNER"];
+  const found = await memberMerchant(session.user.id, selected, roles);
+  const merchant = found?.merchant;
   if (!merchant || merchant.purgeAfter || merchant.status === "DISCONNECTED")
     throw new ApiError(403, "Business unavailable");
-  return { userId: session.user.id, merchantId: merchant.id, merchant };
+  const role = found.role;
+  return {
+    userId: session.user.id,
+    merchantId: merchant.id,
+    merchant,
+    role,
+    /** Demo visitors share one account, so their AI quota is keyed by network. */
+    viewerKey:
+      role === "VIEWER"
+        ? viewerKey(clientIp(req), getEnv().BETTER_AUTH_SECRET ?? "")
+        : undefined,
+  };
 }
 export async function readJson(req: Request, limit = 262144): Promise<unknown> {
   if (Number(req.headers.get("content-length")) > limit)

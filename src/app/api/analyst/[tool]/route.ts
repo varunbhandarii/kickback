@@ -11,7 +11,10 @@ export async function POST(
   { params }: { params: Promise<{ tool: string }> },
 ) {
   try {
-    const actor = await apiActor(req),
+    const actor = await apiActor(req, {
+        allowViewer: true,
+        perMinute: ["analyst-tool", 30],
+      }),
       { tool } = await params;
     return privateJson(await analystRequest(tool, await readJson(req), actor));
   } catch (e) {

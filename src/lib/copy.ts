@@ -206,3 +206,13 @@ const guardPoints: Record<string, number> = {
 export function guardReasonPoints(reason: string): number | undefined {
   return guardPoints[reason];
 }
+
+/** Why AI features are off for a business (see `aiBlocker`). */
+export type AiOff = "disabled" | "budget" | "connect";
+export function aiOff(reason: AiOff) {
+  return {
+    disabled: "The Analyst is unavailable in this deployment. Charts, tables and backtests still work.",
+    budget: "The Analyst is resting until tomorrow. Charts, tables and backtests still work.",
+    connect: "Connect PayPal to use the Analyst and the Designer. Charts, tables and backtests still work.",
+  }[reason];
+}

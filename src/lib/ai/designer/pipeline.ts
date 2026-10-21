@@ -9,6 +9,9 @@ import {
 import {
   aiEnabled,
   structured,
+  AiUnavailable,
+  AiParseFailed,
+  AiRefused,
   type StructuredCaller,
   type Usage,
 } from "../client";
@@ -130,6 +133,13 @@ export async function designPipeline(
         cards = proposed;
         break;
       } catch (error) {
+        // Quota, budget and connection refusals will not change on a retry.
+        if (
+          error instanceof AiUnavailable &&
+          !(error instanceof AiParseFailed) &&
+          !(error instanceof AiRefused)
+        )
+          break;
         violations =
           error instanceof CandidateValidationError
             ? error.message

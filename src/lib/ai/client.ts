@@ -2,14 +2,81 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { and, eq, gte, sql } from "drizzle-orm";
-import { getDb } from "@/db";
-import { aiCalls, merchants } from "@/db/schema";
-import { getEnv } from "../env";
+import { getDb, type Tx } from "@/db";
+import { aiCalls, connections, merchants, settings } from "@/db/schema";
+import { getEnv, protectedDemoSlugs } from "../env";
 import { lockMerchant } from "../ledger/locks";
 export class AiUnavailable extends Error {}
 export class AiRefused extends AiUnavailable {}
 export class AiParseFailed extends AiUnavailable {}
 export class AiQuotaExceeded extends AiUnavailable {}
+/** The business has not connected PayPal yet. */
+export class AiNeedsConnection extends AiUnavailable {}
+/** The Anthropic spend limit was reached; calls pause until the next check. */
+export class AiBudgetExhausted extends AiUnavailable {}
+/** Who is asking: the business itself, or a read-only demo visitor keyed by hashed IP. */
+export type AiActor = { kind: "owner" } | { kind: "viewer"; key: string };
+const BUDGET_KEY = "ai_budget_exhausted",
+  BUDGET_RECHECK_MS = 6 * 3600000;
+/** Anthropic's spend-limit and empty-credit (400) and spend-cap (429) errors. Never retried. */
+export function isSpendLimitError(e: unknown) {
+  if (!e || typeof e !== "object") return false;
+  const status = (e as { status?: unknown }).status,
+    text =
+      String((e as { message?: unknown }).message ?? "") +
+      JSON.stringify((e as { error?: unknown }).error ?? "");
+  return (
+    (status === 400 && /usage limits?|credit balance/i.test(text)) ||
+    (status === 429 && /spend_limit/i.test(text))
+  );
+}
+/** Remember a spend-limit hit so later calls fail fast instead of reaching the API. */
+export async function markBudgetExhausted(now = new Date()) {
+  const value = {
+    at: now.toISOString(),
+    until: new Date(+now + BUDGET_RECHECK_MS).toISOString(),
+  };
+  await getDb()
+    .insert(settings)
+    .values({ key: BUDGET_KEY, value })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value, updatedAt: now },
+    });
+  console.error(
+    JSON.stringify({ action: "ai_budget_exhausted", until: value.until }),
+  );
+}
+/** When the pause ends, or undefined when AI calls may proceed. */
+export async function budgetPausedUntil(now = new Date()) {
+  const [row] = await getDb()
+    .select()
+    .from(settings)
+    .where(eq(settings.key, BUDGET_KEY));
+  const until = row && (row.value as { until?: string }).until;
+  return until && new Date(until) > now ? new Date(until) : undefined;
+}
+/** AI features need a connected PayPal account; the protected demo shops are exempt. */
+export function aiAllowedFor(
+  slug: string,
+  connectionStatus: string | null | undefined,
+) {
+  return (
+    connectionStatus === "CONNECTED" || protectedDemoSlugs().includes(slug)
+  );
+}
+/** One read for pages: why AI is off for this business, or null when it is available. */
+export async function aiBlocker(merchant: { id: string; slug: string }) {
+  if (!aiEnabled()) return "disabled" as const;
+  if (await budgetPausedUntil()) return "budget" as const;
+  const [connection] = await getDb()
+    .select({ status: connections.status })
+    .from(connections)
+    .where(eq(connections.merchantId, merchant.id));
+  if (!aiAllowedFor(merchant.slug, connection?.status))
+    return "connect" as const;
+  return null;
+}
 export const aiEnabled = () =>
   Boolean(getEnv().ANTHROPIC_API_KEY && getEnv().AI_ENABLED);
 export const dataBlock = (value: unknown) =>
@@ -53,15 +120,36 @@ export async function reserveAiCall(
   merchantId: string,
   feature: string,
   operationId?: string,
+  actor: AiActor = { kind: "owner" },
 ) {
   const env = getEnv();
   if (!aiEnabled()) throw new AiUnavailable("AI_DISABLED");
+  // Demo visitors only chat with the Analyst; nothing they do writes.
+  if (actor.kind === "viewer" && feature !== "analyst")
+    throw new AiUnavailable("VIEWER_ANALYST_ONLY");
   const now = new Date(),
-    day = now.toISOString().slice(0, 10),
+    since = new Date(now.toISOString().slice(0, 10) + "T00:00:00Z"),
     lane = feature === "analyst",
+    inLane = lane
+      ? eq(aiCalls.feature, "analyst")
+      : sql`${aiCalls.feature} <> 'analyst'`,
     limit = lane
       ? env.AI_MAX_ANALYST_TURNS_PER_MERCHANT_PER_DAY
-      : env.AI_MAX_CALLS_PER_MERCHANT_PER_DAY;
+      : env.AI_MAX_CALLS_PER_MERCHANT_PER_DAY,
+    globalLimit = lane
+      ? env.AI_MAX_ANALYST_TURNS_GLOBAL_PER_DAY
+      : env.AI_MAX_CALLS_GLOBAL_PER_DAY;
+  if (await budgetPausedUntil(now)) throw new AiBudgetExhausted("AI_BUDGET");
+  const count = async (
+    tx: Tx,
+    ...filters: Parameters<typeof and>
+  ) =>
+    (
+      await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(aiCalls)
+        .where(and(gte(aiCalls.createdAt, since), ...filters))
+    )[0].n;
   const row = await getDb().transaction(async (tx) => {
     await lockMerchant(tx, merchantId);
     const [merchant] = await tx
@@ -70,19 +158,33 @@ export async function reserveAiCall(
       .where(eq(merchants.id, merchantId));
     if (!merchant || merchant.purgeAfter || merchant.status === "DISCONNECTED")
       throw new AiUnavailable("MERCHANT_UNAVAILABLE");
-    const [count] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(aiCalls)
-      .where(
-        and(
-          eq(aiCalls.merchantId, merchantId),
-          gte(aiCalls.createdAt, new Date(day + "T00:00:00Z")),
-          lane
-            ? eq(aiCalls.feature, "analyst")
-            : sql`${aiCalls.feature} <> 'analyst'`,
-        ),
-      );
-    if (count.n >= limit) throw new AiQuotaExceeded("AI_DAILY_LIMIT");
+    const [connection] = await tx
+      .select({ status: connections.status })
+      .from(connections)
+      .where(eq(connections.merchantId, merchantId));
+    if (!aiAllowedFor(merchant.slug, connection?.status))
+      throw new AiNeedsConnection("CONNECT_PAYPAL");
+    // Platform-wide ceiling per lane. Concurrent businesses can overshoot by a call or two.
+    if ((await count(tx, inLane)) >= globalLimit)
+      throw new AiQuotaExceeded("AI_GLOBAL_LIMIT");
+    if (actor.kind === "viewer") {
+      const viewers = eq(aiCalls.actorKind, "viewer");
+      if (
+        (await count(tx, viewers)) >= env.AI_MAX_VIEWER_TURNS_PER_DAY ||
+        (await count(tx, viewers, eq(aiCalls.actorKey, actor.key))) >=
+          env.AI_MAX_VIEWER_TURNS_PER_IP_PER_DAY
+      )
+        throw new AiQuotaExceeded("AI_VIEWER_LIMIT");
+    } else if (
+      // Demo visitors never use up the business's own quota.
+      (await count(
+        tx,
+        eq(aiCalls.merchantId, merchantId),
+        eq(aiCalls.actorKind, "owner"),
+        inLane,
+      )) >= limit
+    )
+      throw new AiQuotaExceeded("AI_DAILY_LIMIT");
     const [reserved] = await tx
       .insert(aiCalls)
       .values({
@@ -90,6 +192,8 @@ export async function reserveAiCall(
         operationId: operationId,
         feature: feature,
         model: env.ANTHROPIC_MODEL,
+        actorKind: actor.kind,
+        actorKey: actor.kind === "viewer" ? actor.key : null,
       })
       .returning();
     return reserved;
@@ -199,6 +303,13 @@ export const structured: StructuredCaller = async <T>(
       usage,
       model: env.ANTHROPIC_MODEL,
     };
+  } catch (e) {
+    if (isSpendLimitError(e)) {
+      status = "BUDGET";
+      await markBudgetExhausted();
+      throw new AiBudgetExhausted("AI_BUDGET");
+    }
+    throw e;
   } finally {
     await finishAiCall(row.id, usage, status, requestId, started);
     console.log(

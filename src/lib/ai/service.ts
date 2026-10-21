@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb, type Tx } from "@/db";
 import { aiCalls, designRuns, merchantUsers, merchants } from "@/db/schema";
 import { loadMerchant } from "../merchants";
+import type { Role } from "../dal";
 import { designData } from "./designer/context";
 import {
   designInputSchema,
@@ -17,6 +18,15 @@ export async function assertOwner(
   merchantId: string,
   db: getDbReturn | Tx = getDb(),
 ) {
+  await assertMember(userId, merchantId, ["OWNER"], db);
+}
+/** Membership with one of `roles`; VIEWER is the read-only demo. */
+export async function assertMember(
+  userId: string,
+  merchantId: string,
+  roles: Role[],
+  db: getDbReturn | Tx = getDb(),
+) {
   const [row] = await db
     .select()
     .from(merchantUsers)
@@ -24,7 +34,7 @@ export async function assertOwner(
       and(
         eq(merchantUsers.userId, userId),
         eq(merchantUsers.merchantId, merchantId),
-        eq(merchantUsers.role, "OWNER"),
+        inArray(merchantUsers.role, roles),
       ),
     );
   if (!row) throw new Error("NOT_AUTHORIZED");

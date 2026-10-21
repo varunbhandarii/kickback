@@ -14,6 +14,10 @@ import {
 import {
   reserveAiCall,
   finishAiCall,
+  isSpendLimitError,
+  markBudgetExhausted,
+  AiBudgetExhausted,
+  AiNeedsConnection,
   AiQuotaExceeded,
   AiUnavailable,
   POLICY,
@@ -116,9 +120,35 @@ const requestSchema = z.object({
     ])
     .optional(),
 });
+/** What the Analyst panel shows when a turn cannot run. */
+function analystError(e: AiUnavailable, role: string) {
+  if (e instanceof AiBudgetExhausted)
+    return {
+      code: "budget",
+      message:
+        "The Analyst is resting until tomorrow. Charts, tables and backtests still work.",
+    };
+  if (e instanceof AiNeedsConnection)
+    return {
+      code: "connect",
+      message: "Connect PayPal to use the Analyst and the Designer.",
+    };
+  if (e instanceof AiQuotaExceeded)
+    return {
+      code: "quota",
+      message:
+        role === "OWNER"
+          ? "Daily analyst limit reached. It resets at midnight UTC."
+          : "That's all the Analyst questions for today's demo. Charts, tables and backtests still work.",
+    };
+  return { code: "unavailable", message: "Analyst unavailable in this deployment" };
+}
 export async function POST(req: Request) {
   try {
-    const actor = await apiActor(req),
+    const actor = await apiActor(req, {
+        allowViewer: true,
+        perMinute: ["analyst-turn", 10],
+      }),
       parsed = requestSchema.safeParse(await readJson(req, 524288));
     if (!parsed.success) throw new ApiError(400, "Invalid analyst request");
     const env = getEnv(),
@@ -151,7 +181,14 @@ export async function POST(req: Request) {
         };
         let requestId: string | undefined;
         try {
-          const row = await reserveAiCall(actor.merchantId, "analyst");
+          const row = await reserveAiCall(
+            actor.merchantId,
+            "analyst",
+            undefined,
+            actor.viewerKey
+              ? { kind: "viewer", key: actor.viewerKey }
+              : { kind: "owner" },
+          );
           id = row.id;
           if (parsed.data.trace)
             await getDb()
@@ -249,30 +286,39 @@ export async function POST(req: Request) {
           const done = finalResponse(final);
           status = done.status === "completed" ? "SUCCEEDED" : "FAILED";
           send({ done });
-        } catch (e) {
+        } catch (caught) {
+          let e = caught;
           if (signal.aborted) status = "CANCELLED";
-          if (e instanceof AiQuotaExceeded || e instanceof AiUnavailable)
+          if (isSpendLimitError(e)) {
+            status = "BUDGET";
+            await markBudgetExhausted().catch(() => undefined);
+            e = new AiBudgetExhausted("AI_BUDGET");
+          }
+          if (e instanceof AiUnavailable)
             send({
               done: {
                 id: crypto.randomUUID(),
                 createdAt: Date.now(),
                 output: [],
                 status: "failed",
-                error: {
-                  code: e instanceof AiQuotaExceeded ? "quota" : "unavailable",
-                  message:
-                    e instanceof AiQuotaExceeded
-                      ? "Daily analyst limit reached"
-                      : "Analyst unavailable in this deployment",
-                },
+                error: analystError(e, actor.role),
               },
             });
-          else
+          else {
+            if (!signal.aborted)
+              console.error(
+                JSON.stringify({
+                  action: "analyst_turn_failed",
+                  error: e instanceof Error ? e.name : "unknown",
+                  status: (e as { status?: number }).status,
+                }),
+              );
             send({
               error: signal.aborted
                 ? "Analyst turn cancelled"
                 : "Analyst unavailable. Try again.",
             });
+          }
         } finally {
           try {
             if (id) await finishAiCall(id, usage, status, requestId, started);

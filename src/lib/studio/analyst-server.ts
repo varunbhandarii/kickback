@@ -2,9 +2,9 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, visits } from "@/db/schema";
-import { executeAnalystTool, toolSchemas } from "../ai/tools";
+import { executeAnalystTool, toolRoles, toolSchemas } from "../ai/tools";
 import { ApiError } from "./api-actor";
-import { assertOwner } from "../ai/service";
+import { assertMember } from "../ai/service";
 export async function resolveCode(
   merchantId: string,
   code: string,
@@ -47,7 +47,7 @@ export async function analystRequest(
   input: unknown,
   actor: { userId: string; merchantId: string },
 ) {
-  await assertOwner(actor.userId, actor.merchantId);
+  await assertMember(actor.userId, actor.merchantId, toolRoles(tool));
   if (!Object.hasOwn(toolSchemas, tool))
     throw new ApiError(404, "Unknown tool");
   if (!input || typeof input !== "object" || Array.isArray(input))

@@ -9,7 +9,10 @@ import { querySchema, QueryError } from "@/lib/studio/query";
 import { studioQuery } from "@/lib/studio/server-data";
 export async function POST(req: Request) {
   try {
-    const actor = await apiActor(req),
+    const actor = await apiActor(req, {
+        allowViewer: true,
+        perMinute: ["studio-query", 120],
+      }),
       body = querySchema.safeParse(await readJson(req));
     if (!body.success) throw new ApiError(400, "Invalid query");
     return privateJson(await studioQuery(actor.merchant, body.data));
