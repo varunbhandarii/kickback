@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { merchants, merchantUsers, rewards } from "@/db/schema";
-import { ownedMerchant, requireUser } from "@/lib/dal";
+import { memberMerchant, requireUser } from "@/lib/dal";
 import { getEnv } from "@/lib/env";
 import { AppShell } from "@/components/shell/app-shell";
 export default async function MerchantLayout({
@@ -12,16 +12,20 @@ export default async function MerchantLayout({
 }) {
   const user = await requireUser(),
     selected = (await cookies()).get("kickback.merchant")?.value,
-    current =
-      (await ownedMerchant(user.id, selected)) ??
-      (await ownedMerchant(user.id));
+    found =
+      (await memberMerchant(user.id, selected, ["OWNER", "VIEWER"])) ??
+      (await memberMerchant(user.id, undefined, ["OWNER", "VIEWER"])),
+    current = found?.merchant;
   const [businesses, [review]] = await Promise.all([
     getDb()
       .select({ id: merchants.id, name: merchants.displayName })
       .from(merchantUsers)
       .innerJoin(merchants, eq(merchants.id, merchantUsers.merchantId))
       .where(
-        and(eq(merchantUsers.userId, user.id), eq(merchantUsers.role, "OWNER")),
+        and(
+          eq(merchantUsers.userId, user.id),
+          inArray(merchantUsers.role, ["OWNER", "VIEWER"]),
+        ),
       )
       .orderBy(merchants.createdAt, merchants.slug),
     current
@@ -44,6 +48,7 @@ export default async function MerchantLayout({
       }
       sandbox={getEnv().KICKBACK_ENV === "sandbox"}
       reviewCount={review?.count ?? 0}
+      readOnly={found?.role === "VIEWER"}
     >
       {children}
     </AppShell>

@@ -1,8 +1,8 @@
 export const metadata = { title: "Design your program" };
-import { requireMerchant } from "@/lib/dal";
+import { requireOwnerMerchant } from "@/lib/dal";
 import { loadMerchant } from "@/lib/merchants";
 import ProgramForm from "./program-form";
-import { aiEnabled } from "@/lib/ai/client";
+import { aiBlocker } from "@/lib/ai/client";
 import { prior } from "@/lib/ai/designer/context";
 import { editorStart } from "./editor-data";
 export default async function ProgramPage({
@@ -10,8 +10,9 @@ export default async function ProgramPage({
 }: {
   searchParams: Promise<{ suggestion?: string; rule?: string }>;
 }) {
-  const { merchant } = await requireMerchant(),
-    loaded = await loadMerchant(merchant.slug, true);
+  const { merchant } = await requireOwnerMerchant(),
+    loaded = await loadMerchant(merchant.slug, true),
+    aiOff = (await aiBlocker(merchant)) ?? undefined;
   const { initial, initialDesign } = await editorStart(
     merchant.id,
     loaded?.spec,
@@ -30,7 +31,8 @@ export default async function ProgramPage({
         merchantId={merchant.id}
         category={merchant.category}
         initial={initial}
-        aiEnabled={aiEnabled()}
+        aiEnabled={!aiOff}
+          aiOff={aiOff}
         margin={prior(merchant.category).marginPct}
         initialDesign={initialDesign}
         merchantName={merchant.displayName}

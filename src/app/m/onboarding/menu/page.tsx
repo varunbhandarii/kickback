@@ -1,11 +1,11 @@
 export const metadata = { title: "Menu and sign" };
-import { requireMerchant } from "@/lib/dal";
+import { requireOwnerMerchant } from "@/lib/dal";
 import { loadMerchant } from "@/lib/merchants";
 import { getEnv } from "@/lib/env";
 import MenuForm, { SignActions } from "./menu-form";
 import { SignSheet } from "@/app/pay/[slug]/sign/sign-sheet";
 export default async function MenuPage() {
-  const { merchant } = await requireMerchant(),
+  const { merchant } = await requireOwnerMerchant(),
     loaded = await loadMerchant(merchant.slug, true),
     url = new URL(`/pay/${merchant.slug}`, getEnv().APP_URL).href;
   return (

@@ -13,7 +13,7 @@ import {
 import ReviewControls from "./review-controls";
 import { explainReview } from "./actions";
 import { requireMerchant } from "@/lib/dal";
-import { aiEnabled } from "@/lib/ai/client";
+import { aiBlocker } from "@/lib/ai/client";
 import type { ProgramSpec } from "@/lib/engine/program";
 import { Icon } from "@/components/icons";
 import { Meter, PageHeader, Section, State, StatusChip } from "@/components/ui";
@@ -28,6 +28,7 @@ import {
   rewardState,
   wallet,
 } from "@/lib/copy";
+import { DemoLock } from "@/components/demo-lock";
 export const metadata = { title: "Rewards" };
 const PAGE = 25;
 const views = [
@@ -39,7 +40,12 @@ const views = [
 ] as const;
 type Explanation = {
   explanation?: string;
-  suggested_rule_change?: { field: string; from: number; to: number; why?: string };
+  suggested_rule_change?: {
+    field: string;
+    from: number;
+    to: number;
+    why?: string;
+  };
 } | null;
 /** Whole days a held reward has waited. */
 function waitedDays(created: Date, now = Date.now()) {
@@ -48,19 +54,40 @@ function waitedDays(created: Date, now = Date.now()) {
 export default async function RewardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; view?: string; page?: string; q?: string }>;
+  searchParams: Promise<{
+    state?: string;
+    view?: string;
+    page?: string;
+    q?: string;
+  }>;
 }) {
   const { merchant } = await requireMerchant(),
     query = await searchParams,
     exact = rewardStates.enumValues.find((s) => s === query.state),
-    view = views.find((v) => v.key === (query.view === "sent" ? "sent" : (exact ?? ""))) ?? views[0],
-    states: string[] | undefined = exact ? [exact] : "states" in view ? [...view.states] : undefined,
+    view =
+      views.find(
+        (v) => v.key === (query.view === "sent" ? "sent" : (exact ?? "")),
+      ) ?? views[0],
+    states: string[] | undefined = exact
+      ? [exact]
+      : "states" in view
+        ? [...view.states]
+        : undefined,
     q = (query.q ?? "").replace(/[^A-Za-z0-9]/g, "").slice(0, 16),
     page = Math.max(1, Math.min(10000, Number(query.page) || 1)),
     db = getDb();
   const where: SQL[] = [eq(rewards.merchantId, merchant.id)];
-  if (states) where.push(inArray(rewards.state, states as (typeof rewardStates.enumValues)[number][]));
-  if (q) where.push(sql`lower(${rewards.customerKey}) like ${q.toLowerCase() + "%"}`);
+  if (states)
+    where.push(
+      inArray(
+        rewards.state,
+        states as (typeof rewardStates.enumValues)[number][],
+      ),
+    );
+  if (q)
+    where.push(
+      sql`lower(${rewards.customerKey}) like ${q.toLowerCase() + "%"}`,
+    );
   const [counts, [{ total }], rows, queue] = await Promise.all([
     db
       .select({ state: rewards.state, n: sql<number>`count(*)::int` })
@@ -72,11 +99,22 @@ export default async function RewardsPage({
       .from(rewards)
       .where(and(...where)),
     db
-      .select({ reward: rewards, date: visits.startedAt, flag: guardFlags, spec: programs.spec })
+      .select({
+        reward: rewards,
+        date: visits.startedAt,
+        flag: guardFlags,
+        spec: programs.spec,
+      })
       .from(rewards)
       .innerJoin(visits, eq(visits.id, rewards.visitId))
       .innerJoin(programs, eq(programs.id, rewards.programId))
-      .leftJoin(guardFlags, and(eq(guardFlags.rewardId, rewards.id), eq(guardFlags.merchantId, merchant.id)))
+      .leftJoin(
+        guardFlags,
+        and(
+          eq(guardFlags.rewardId, rewards.id),
+          eq(guardFlags.merchantId, merchant.id),
+        ),
+      )
       .where(and(...where))
       .orderBy(desc(rewards.createdAt), rewards.id)
       .limit(PAGE)
@@ -87,13 +125,28 @@ export default async function RewardsPage({
         flag: guardFlags,
         spec: programs.spec,
         visit: { startedAt: visits.startedAt, amountCents: visits.amountCents },
-        customer: { firstSeen: customers.firstSeen, wallets: customers.wallets },
+        customer: {
+          firstSeen: customers.firstSeen,
+          wallets: customers.wallets,
+        },
       })
       .from(rewards)
-      .innerJoin(guardFlags, and(eq(guardFlags.rewardId, rewards.id), eq(guardFlags.merchantId, merchant.id)))
+      .innerJoin(
+        guardFlags,
+        and(
+          eq(guardFlags.rewardId, rewards.id),
+          eq(guardFlags.merchantId, merchant.id),
+        ),
+      )
       .innerJoin(visits, eq(visits.id, rewards.visitId))
       .innerJoin(programs, eq(programs.id, rewards.programId))
-      .leftJoin(customers, and(eq(customers.merchantId, rewards.merchantId), eq(customers.key, rewards.customerKey)))
+      .leftJoin(
+        customers,
+        and(
+          eq(customers.merchantId, rewards.merchantId),
+          eq(customers.key, rewards.customerKey),
+        ),
+      )
       .where(
         and(
           eq(rewards.merchantId, merchant.id),
@@ -107,24 +160,45 @@ export default async function RewardsPage({
   ]);
   const merged = queue.length
     ? await db
-        .select({ id: captures.id, visitId: captures.visitId, amountCents: captures.amountCents, capturedAt: captures.capturedAt, wallet: captures.wallet })
+        .select({
+          id: captures.id,
+          visitId: captures.visitId,
+          amountCents: captures.amountCents,
+          capturedAt: captures.capturedAt,
+          wallet: captures.wallet,
+        })
         .from(captures)
-        .where(and(eq(captures.merchantId, merchant.id), inArray(captures.visitId, queue.map((r) => r.reward.visitId))))
+        .where(
+          and(
+            eq(captures.merchantId, merchant.id),
+            inArray(
+              captures.visitId,
+              queue.map((r) => r.reward.visitId),
+            ),
+          ),
+        )
         .orderBy(asc(captures.capturedAt))
     : [];
   const count = new Map(counts.map((c) => [c.state, c.n]));
   const viewCount = (v: (typeof views)[number]) =>
-    "states" in v ? v.states.reduce((s, st) => s + (count.get(st) ?? 0), 0) : counts.reduce((s, c) => s + c.n, 0);
+    "states" in v
+      ? v.states.reduce((s, st) => s + (count.get(st) ?? 0), 0)
+      : counts.reduce((s, c) => s + c.n, 0);
   const href = (params: Record<string, string | number | undefined>) => {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") sp.set(k, String(v));
+    for (const [k, v] of Object.entries(params))
+      if (v !== undefined && v !== "") sp.set(k, String(v));
     const s = sp.toString();
     return `/m/rewards${s ? `?${s}` : ""}`;
   };
-  const viewParams = (key: string) => (key === "sent" ? { view: "sent" } : { state: key || undefined });
-  const currentParams = { ...viewParams(exact ?? (view.key === "sent" ? "sent" : "")), q: q || undefined };
+  const viewParams = (key: string) =>
+    key === "sent" ? { view: "sent" } : { state: key || undefined };
+  const currentParams = {
+    ...viewParams(exact ?? (view.key === "sent" ? "sent" : "")),
+    q: q || undefined,
+  };
   const year = new Date().getUTCFullYear();
-  const ai = aiEnabled();
+  const ai = !(await aiBlocker(merchant));
   const start = (page - 1) * PAGE;
   return (
     <>
@@ -136,11 +210,21 @@ export default async function RewardsPage({
             <Link href="/m/help#taxes" className="btn btn-ghost">
               How rewards show in your taxes
             </Link>
-            <form action="/api/m/rewards.csv" method="get" className="flex items-center gap-2">
+            <form
+              action="/api/m/rewards.csv"
+              method="get"
+              className="flex items-center gap-2"
+            >
               <label htmlFor="csv-year" className="sr-only">
                 Tax year
               </label>
-              <select id="csv-year" name="year" className="select" defaultValue={year} style={{ width: 104 }}>
+              <select
+                id="csv-year"
+                name="year"
+                className="select"
+                defaultValue={year}
+                style={{ width: 104 }}
+              >
                 {[year, year - 1, year - 2].map((y) => (
                   <option key={y} value={y}>
                     {y}
@@ -157,36 +241,62 @@ export default async function RewardsPage({
       />
 
       {!!queue.length && (
-        <Section title={`Waiting for your review · ${queue.length}`} id="review">
+        <Section
+          title={`Waiting for your review · ${queue.length}`}
+          id="review"
+        >
           {queue.map(({ reward: r, flag, spec, visit, customer }) => {
             const amount = r.amountCents - r.offsetAppliedCents;
             const explanation = flag.explanation as Explanation;
             const payments = merged.filter((c) => c.visitId === r.visitId);
             const waited = waitedDays(r.createdAt);
             return (
-              <article key={r.id} className="card card-warn card-pad grid gap-6" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))" }} aria-labelledby={`review-${r.id}`}>
+              <article
+                key={r.id}
+                className="card card-warn card-pad grid gap-6"
+                style={{
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+                }}
+                aria-labelledby={`review-${r.id}`}
+              >
                 <div className="flex min-w-0 flex-col gap-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusChip tone="warn" label="Needs review" size="sm" />
                     <span className="caption" style={{ fontSize: 13 }}>
                       Held {when(r.createdAt, merchant.tz)}
-                      {waited > 0 && ` · waiting ${waited} day${waited === 1 ? "" : "s"}`}
+                      {waited > 0 &&
+                        ` · waiting ${waited} day${waited === 1 ? "" : "s"}`}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <h3 id={`review-${r.id}`} className="display num" style={{ fontSize: 24 }}>
-                      {money(amount)} for <span className="mono">{customerCode(r.customerKey)}</span>
+                    <h3
+                      id={`review-${r.id}`}
+                      className="display num"
+                      style={{ fontSize: 24 }}
+                    >
+                      {money(amount)} for{" "}
+                      <span className="mono">
+                        {customerCode(r.customerKey)}
+                      </span>
                     </h3>
                     <p className="caption" style={{ fontSize: 13.5 }}>
-                      {rewardKind(r.kind, spec as ProgramSpec)} · visit {when(visit.startedAt, merchant.tz)} ·{" "}
+                      {rewardKind(r.kind, spec as ProgramSpec)} · visit{" "}
+                      {when(visit.startedAt, merchant.tz)} ·{" "}
                       {money(visit.amountCents)}
-                      {customer && ` · ${customer.wallets.map(wallet).join(" and ") || "wallet unknown"} · first seen ${when(customer.firstSeen, merchant.tz)}`}
+                      {customer &&
+                        ` · ${customer.wallets.map(wallet).join(" and ") || "wallet unknown"} · first seen ${when(customer.firstSeen, merchant.tz)}`}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-baseline justify-between gap-3">
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>Risk score</span>
-                      <span className="num" style={{ fontSize: 14, fontWeight: 600 }}>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>
+                        Risk score
+                      </span>
+                      <span
+                        className="num"
+                        style={{ fontSize: 14, fontWeight: 600 }}
+                      >
                         {flag.score} of 100 · {guardTier(flag.tier)}
                       </span>
                     </div>
@@ -204,13 +314,28 @@ export default async function RewardsPage({
                     />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <h4 style={{ fontSize: 14, fontWeight: 600 }}>Why it was held</h4>
+                    <h4 style={{ fontSize: 14, fontWeight: 600 }}>
+                      Why it was held
+                    </h4>
                     {flag.reasons.length ? (
                       <ul className="flex flex-col gap-1.5">
                         {flag.reasons.map((reason) => (
-                          <li key={reason} className="flex gap-2.5" style={{ fontSize: 14, lineHeight: 1.5 }}>
-                            <span className="num flex-none" style={{ minWidth: 34, fontWeight: 700, color: "var(--warn)" }}>
-                              {guardReasonPoints(reason) !== undefined ? `+${guardReasonPoints(reason)}` : "•"}
+                          <li
+                            key={reason}
+                            className="flex gap-2.5"
+                            style={{ fontSize: 14, lineHeight: 1.5 }}
+                          >
+                            <span
+                              className="num flex-none"
+                              style={{
+                                minWidth: 34,
+                                fontWeight: 700,
+                                color: "var(--warn)",
+                              }}
+                            >
+                              {guardReasonPoints(reason) !== undefined
+                                ? `+${guardReasonPoints(reason)}`
+                                : "•"}
                             </span>
                             <span>{reason}</span>
                           </li>
@@ -223,44 +348,81 @@ export default async function RewardsPage({
                     )}
                   </div>
                   {explanation?.explanation ? (
-                    <div className="card-tint flex flex-col gap-1.5" style={{ borderRadius: 12, padding: "12px 14px" }}>
-                      <span className="eyebrow" style={{ color: "var(--forest)" }}>
+                    <div
+                      className="card-tint flex flex-col gap-1.5"
+                      style={{ borderRadius: 12, padding: "12px 14px" }}
+                    >
+                      <span
+                        className="eyebrow"
+                        style={{ color: "var(--forest)" }}
+                      >
                         AI explanation, checked against these signals
                       </span>
-                      <p style={{ fontSize: 14, lineHeight: 1.55 }}>{explanation.explanation}</p>
+                      <p style={{ fontSize: 14, lineHeight: 1.55 }}>
+                        {explanation.explanation}
+                      </p>
                       {explanation.suggested_rule_change && (
-                        <Link href={`/m/program?rule=${flag.id}`} style={{ fontSize: 14, fontWeight: 600 }}>
+                        <Link
+                          href={`/m/program?rule=${flag.id}`}
+                          style={{ fontSize: 14, fontWeight: 600 }}
+                        >
                           Review the suggested rule change
                         </Link>
                       )}
                     </div>
                   ) : (
                     ai && (
-                      <form action={explainReview}>
-                        <input type="hidden" name="merchantId" value={merchant.id} />
-                        <input type="hidden" name="rewardId" value={r.id} />
-                        <SubmitButton className="btn btn-tint btn-sm" pendingLabel="Explaining…">
-                          <Icon name="sparkles" size={14} />
-                          Explain in plain words
-                        </SubmitButton>
-                      </form>
+                      <DemoLock>
+                        <form action={explainReview}>
+                          <input
+                            type="hidden"
+                            name="merchantId"
+                            value={merchant.id}
+                          />
+                          <input type="hidden" name="rewardId" value={r.id} />
+                          <SubmitButton
+                            className="btn btn-tint btn-sm"
+                            pendingLabel="Explaining…"
+                          >
+                            <Icon name="sparkles" size={14} />
+                            Explain in plain words
+                          </SubmitButton>
+                        </form>
+                      </DemoLock>
                     )
                   )}
                 </div>
                 <div className="flex min-w-0 flex-col gap-5">
                   <div className="flex flex-col gap-2">
                     <h4 style={{ fontSize: 14, fontWeight: 600 }}>
-                      {payments.length > 1 ? `${payments.length} payments merged into this visit` : "Payment for this visit"}
+                      {payments.length > 1
+                        ? `${payments.length} payments merged into this visit`
+                        : "Payment for this visit"}
                     </h4>
-                    <ul className="flex flex-col" style={{ border: "1px solid var(--line)", borderRadius: 12 }}>
+                    <ul
+                      className="flex flex-col"
+                      style={{
+                        border: "1px solid var(--line)",
+                        borderRadius: 12,
+                      }}
+                    >
                       {payments.map((c, i) => (
                         <li
                           key={c.id}
                           className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
-                          style={{ padding: "9px 12px", borderTop: i ? "1px solid var(--line)" : undefined, fontSize: 13.5 }}
+                          style={{
+                            padding: "9px 12px",
+                            borderTop: i ? "1px solid var(--line)" : undefined,
+                            fontSize: 13.5,
+                          }}
                         >
-                          <span className="num">{when(c.capturedAt, merchant.tz)}</span>
-                          <span className="mono caption" style={{ fontSize: 12.5 }}>
+                          <span className="num">
+                            {when(c.capturedAt, merchant.tz)}
+                          </span>
+                          <span
+                            className="mono caption"
+                            style={{ fontSize: 12.5 }}
+                          >
                             {c.id}
                           </span>
                           <span className="num" style={{ fontWeight: 600 }}>
@@ -275,7 +437,13 @@ export default async function RewardsPage({
                       )}
                     </ul>
                   </div>
-                  <ReviewControls merchantId={merchant.id} rewardId={r.id} amountCents={amount} />
+                  <DemoLock>
+                    <ReviewControls
+                      merchantId={merchant.id}
+                      rewardId={r.id}
+                      amountCents={amount}
+                    />
+                  </DemoLock>
                 </div>
               </article>
             );
@@ -300,11 +468,20 @@ export default async function RewardsPage({
           </nav>
           <form method="get" className="flex items-center gap-2" role="search">
             {exact && <input type="hidden" name="state" value={exact} />}
-            {view.key === "sent" && <input type="hidden" name="view" value="sent" />}
+            {view.key === "sent" && (
+              <input type="hidden" name="view" value="sent" />
+            )}
             <label htmlFor="reward-search" className="sr-only">
               Find a customer code
             </label>
-            <input id="reward-search" name="q" className="input" placeholder="Customer code, e.g. A1B2" defaultValue={q} style={{ width: 220 }} />
+            <input
+              id="reward-search"
+              name="q"
+              className="input"
+              placeholder="Customer code, e.g. A1B2"
+              defaultValue={q}
+              style={{ width: 220 }}
+            />
             <button type="submit" className="btn btn-secondary">
               <Icon name="search" size={16} />
               Find
@@ -313,7 +490,8 @@ export default async function RewardsPage({
         </div>
         {exact && !views.some((v) => v.key === exact) && (
           <p className="caption" style={{ fontSize: 14 }}>
-            Showing {rewardState(exact).label.toLowerCase()} rewards. <Link href={href({ q: q || undefined })}>Show all</Link>
+            Showing {rewardState(exact).label.toLowerCase()} rewards.{" "}
+            <Link href={href({ q: q || undefined })}>Show all</Link>
           </p>
         )}
         <div className="card table-wrap">
@@ -335,7 +513,8 @@ export default async function RewardsPage({
                 {rows.map(({ reward: r, date, flag, spec }) => {
                   const status = rewardState(r.state);
                   // The status chip already says a held reward is waiting for review.
-                  const reason = r.reason === "REVIEW" ? "" : rewardReason(r.reason);
+                  const reason =
+                    r.reason === "REVIEW" ? "" : rewardReason(r.reason);
                   return (
                     <tr key={r.id}>
                       <td className="num" style={{ whiteSpace: "nowrap" }}>
@@ -347,10 +526,16 @@ export default async function RewardsPage({
                           {money(r.amountCents - r.offsetAppliedCents)}
                         </span>
                         <br />
-                        <span className="caption">{rewardKind(r.kind, spec as ProgramSpec)}</span>
+                        <span className="caption">
+                          {rewardKind(r.kind, spec as ProgramSpec)}
+                        </span>
                       </td>
                       <td>
-                        <StatusChip tone={status.tone} label={status.label} size="sm" />
+                        <StatusChip
+                          tone={status.tone}
+                          label={status.label}
+                          size="sm"
+                        />
                         {reason && (
                           <>
                             <br />
@@ -371,11 +556,16 @@ export default async function RewardsPage({
                         {r.refundId ? (
                           <span className="inline-flex items-center gap-1">
                             <span className="code">{r.refundId}</span>
-                            <CopyButton value={r.refundId} label={`Copy refund ID ${r.refundId}`} />
+                            <CopyButton
+                              value={r.refundId}
+                              label={`Copy refund ID ${r.refundId}`}
+                            />
                           </span>
                         ) : (
                           <span className="caption">
-                            {["CANCELLED", "OFFSET", "FAILED"].includes(r.state) ? "Not sent" : "Not sent yet"}
+                            {["CANCELLED", "OFFSET", "FAILED"].includes(r.state)
+                              ? "Not sent"
+                              : "Not sent yet"}
                           </span>
                         )}
                       </td>
@@ -385,7 +575,13 @@ export default async function RewardsPage({
               </tbody>
             </table>
           ) : (
-            <State icon="rewards" title={q || states ? "No rewards match this filter" : "No rewards yet"} as="h3">
+            <State
+              icon="rewards"
+              title={
+                q || states ? "No rewards match this filter" : "No rewards yet"
+              }
+              as="h3"
+            >
               <p>
                 {q || states
                   ? "Try another filter or clear the search."
@@ -400,12 +596,18 @@ export default async function RewardsPage({
               </span>
               <span className="flex gap-2">
                 {page > 1 && (
-                  <Link className="btn btn-secondary btn-sm" href={href({ ...currentParams, page: page - 1 })}>
+                  <Link
+                    className="btn btn-secondary btn-sm"
+                    href={href({ ...currentParams, page: page - 1 })}
+                  >
                     Previous
                   </Link>
                 )}
                 {start + rows.length < total && (
-                  <Link className="btn btn-secondary btn-sm" href={href({ ...currentParams, page: page + 1 })}>
+                  <Link
+                    className="btn btn-secondary btn-sm"
+                    href={href({ ...currentParams, page: page + 1 })}
+                  >
                     Next
                   </Link>
                 )}

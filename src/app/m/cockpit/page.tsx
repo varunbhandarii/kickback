@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { cockpitStates, visits } from "@/db/schema";
 import { requireMerchant } from "@/lib/dal";
 import { loadMerchant } from "@/lib/merchants";
-import { aiEnabled } from "@/lib/ai/client";
+import { aiBlocker } from "@/lib/ai/client";
 import { getEnv } from "@/lib/env";
 import { validateState } from "@/lib/studio/state";
 import { ruleInWords } from "@/lib/studio/context";
@@ -69,7 +69,7 @@ export default async function CockpitPage() {
       }}
       initialState={state}
       invalidState={invalid}
-      ai={aiEnabled()}
+      aiOff={(await aiBlocker(merchant)) ?? undefined}
     />
   );
 }

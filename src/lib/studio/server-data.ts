@@ -5,6 +5,17 @@ import { loadMerchant } from "../merchants";
 import { querySchema, querySuffix } from "./query";
 import type { z } from "zod";
 import { cohortQuery } from "./cohorts";
+import { customerStatus, rewardState } from "@/db/schema";
+import { customerStatus as customerWords, rewardState as rewardWords } from "../copy";
+/** A SQL CASE that turns stored enum values into the words the rest of the app shows. */
+const words = (column: string, values: readonly string[], label: (v: string) => string) =>
+  sql.raw(
+    `case ${column}::text ${values
+      .map((v) => `when '${v}' then '${label(v).replaceAll("'", "''")}'`)
+      .join(" ")} else ${column}::text end`,
+  );
+const stateLabel = words("r.state", rewardState.enumValues, (v) => rewardWords(v).label),
+  statusLabel = words("c.status", customerStatus.enumValues, (v) => customerWords(v).label);
 export async function studioQuery(
   merchant: { id: string; slug: string; tz: string },
   body: z.infer<typeof querySchema>,
@@ -37,9 +48,9 @@ export async function studioQuery(
   if (body.table === "visits")
     rows = sql`select id,customer_key,customer_label,day,started_at,weekday,amount_cents/100.0 amount,wallet,status::text status,source_label source,captures,qualifying from v`;
   else if (body.table === "rewards")
-    rows = sql`select id,customer_key,customer_label,created_at,sent_at,state::text state,tier::text tier,(amount_cents-offset_applied_cents)/100.0 amount,reason,guard_score,refund_id,note from r`;
+    rows = sql`select id,customer_key,customer_label,created_at,sent_at,state::text state,${stateLabel} state_label,tier::text tier,(amount_cents-offset_applied_cents)/100.0 amount,reason,guard_score,refund_id,note from r`;
   else if (body.table === "customers")
-    rows = sql`select c.key,'Regular #' || upper(substr(c.key,1,4)) label,array_to_string(c.wallets,', ') wallets,c.first_seen,c.last_seen,c.status::text status,
+    rows = sql`select c.key,'Regular #' || upper(substr(c.key,1,4)) label,array_to_string(c.wallets,', ') wallets,c.first_seen,c.last_seen,c.status::text status,${statusLabel} status_label,
     coalesce(a.visits,0)::int visits_90d,coalesce(a.spend,0)/100.0 spend_90d,
     coalesce((c.progress_json->>'current')::numeric,0) progress_current,coalesce((c.progress_json->>'target')::numeric,${loaded?.spec.type === "VISIT_MILESTONE" ? loaded.spec.n : (loaded?.spec.spendCents ?? 0)}) progress_target,
     ${loaded?.spec.type === "VISIT_MILESTONE" ? "visits" : "spend"} progress_kind,

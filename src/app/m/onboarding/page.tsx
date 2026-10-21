@@ -1,8 +1,8 @@
 export const metadata = { title: "Business setup" };
 import { redirect } from "next/navigation";
-import { requireMerchant } from "@/lib/dal";
+import { requireOwnerMerchant } from "@/lib/dal";
 export default async function Onboarding() {
-  const { merchant } = await requireMerchant();
+  const { merchant } = await requireOwnerMerchant();
   redirect(
     merchant.onboardingStep === "done"
       ? "/m"

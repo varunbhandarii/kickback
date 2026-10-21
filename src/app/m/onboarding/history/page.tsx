@@ -2,11 +2,11 @@ export const metadata = { title: "Read your history" };
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { backfillRuns, connections } from "@/db/schema";
-import { requireMerchant } from "@/lib/dal";
+import { requireOwnerMerchant } from "@/lib/dal";
 import { SEARCH_SCOPE } from "@/lib/connections";
 import HistoryPanel from "./history-panel";
 export default async function HistoryPage() {
-  const { merchant } = await requireMerchant(),
+  const { merchant } = await requireOwnerMerchant(),
     [connection] = await getDb()
       .select()
       .from(connections)

@@ -11,6 +11,8 @@ import { ConfirmButton } from "@/components/form-controls";
 import { Meter, PunchRow, SpendBar } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
+import { useReadOnly } from "@/components/demo-lock";
+import type { AiOff } from "@/lib/copy";
 import { money, pct, programHeadline } from "@/lib/format";
 const presets = [
   ["cafe", "Cafe", "5 visits, $2 back"],
@@ -109,6 +111,7 @@ export default function ProgramForm({
   initial,
   merchantId,
   aiEnabled = false,
+  aiOff,
   margin = 60,
   initialDesign,
   merchantName = "your business",
@@ -119,12 +122,14 @@ export default function ProgramForm({
   merchantId: string;
   initial?: ProgramSpec;
   aiEnabled?: boolean;
+  aiOff?: AiOff;
   margin?: number;
   initialDesign?: DesignResult & { id: string };
   merchantName?: string;
   live?: ProgramSpec;
   returnTo?: "program";
 }) {
+  const readOnly = useReadOnly();
   const [choice, setChoice] = useState(category),
     [spec, setSpec] = useState(initial ?? preset(category)),
     [state, action, pending] = useActionState(submitProgram, {});
@@ -167,6 +172,7 @@ export default function ProgramForm({
       <DesignerPanel
         merchantId={merchantId}
         enabled={aiEnabled}
+        off={aiOff}
         margin={margin}
         initial={initialDesign}
         onUse={(chosen, runId, candidateId, liftAssumptionPct) => {
@@ -661,10 +667,16 @@ export default function ProgramForm({
                   {state.error}
                 </p>
               )}
+              {readOnly && (
+                <p className="caption" style={{ fontSize: 13 }}>
+                  Activation is turned off in the read-only demo. Change any number and run the backtest to see its
+                  effect.
+                </p>
+              )}
               {live ? (
                 <ConfirmButton
                   className="btn btn-primary btn-block"
-                  disabled={pending}
+                  disabled={pending || readOnly}
                   title="Activate this program?"
                   body={
                     diff.length ? (
@@ -687,7 +699,7 @@ export default function ProgramForm({
                   {pending ? "Activating…" : "Activate program"}
                 </ConfirmButton>
               ) : (
-                <button type="submit" className="btn btn-primary btn-block" disabled={pending} aria-busy={pending || undefined}>
+                <button type="submit" className="btn btn-primary btn-block" disabled={pending || readOnly} aria-busy={pending || undefined}>
                   {pending && <span className="spinner" aria-hidden="true" />}
                   {pending ? "Activating…" : "Activate program"}
                 </button>

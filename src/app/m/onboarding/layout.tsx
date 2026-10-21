@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ownedMerchant, requireUser } from "@/lib/dal";
+import { memberMerchant, ownedMerchant, requireUser } from "@/lib/dal";
+import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { BrandLink } from "@/components/brand";
 import { Stepper } from "./stepper";
@@ -13,6 +14,9 @@ export default async function WizardLayout({
     merchant =
       (await ownedMerchant(user.id, selected)) ??
       (await ownedMerchant(user.id));
+  // Read-only demo visitors have nothing to set up.
+  if (!merchant && (await memberMerchant(user.id, undefined, ["VIEWER"])))
+    redirect("/m");
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="setup-head">

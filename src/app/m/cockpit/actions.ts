@@ -6,7 +6,9 @@ import { requireMerchant } from "@/lib/dal";
 import { validateState } from "@/lib/studio/state";
 import { audit } from "@/lib/audit";
 export async function saveCockpitState(state: unknown) {
-  const { user, merchant } = await requireMerchant();
+  const { user, merchant, role } = await requireMerchant();
+  // Read-only demo layouts stay in the visitor's browser.
+  if (role !== "OWNER") return;
   if (merchant.purgeAfter || merchant.status === "DISCONNECTED")
     throw new Error("Business unavailable");
   const valid = validateState(state);
@@ -32,7 +34,8 @@ export async function saveCockpitState(state: unknown) {
   });
 }
 export async function resetCockpitState() {
-  const { user, merchant } = await requireMerchant();
+  const { user, merchant, role } = await requireMerchant();
+  if (role !== "OWNER") return;
   await getDb().transaction(async (tx) => {
     await tx
       .delete(cockpitStates)

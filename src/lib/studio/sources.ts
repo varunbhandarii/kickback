@@ -12,6 +12,7 @@ export const sourceFields = {
     progress_kind: "text",
     progress_pct: "percentage",
     status: "text",
+    status_label: "text",
     is_demo: "boolean",
   },
   visits: {
@@ -35,6 +36,7 @@ export const sourceFields = {
     created_at: "datetime",
     sent_at: "datetime",
     state: "text",
+    state_label: "text",
     tier: "text",
     amount: "currency",
     reason: "text",

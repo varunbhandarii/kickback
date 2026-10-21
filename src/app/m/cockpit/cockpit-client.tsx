@@ -16,6 +16,8 @@ import { Icon } from "@/components/icons";
 import { State } from "@/components/ui";
 import { Popover } from "@/components/shell/popover";
 import { useThemeChoice } from "@/components/shell/theme-switch";
+import { useReadOnly } from "@/components/demo-lock";
+import { aiOff, type AiOff } from "@/lib/copy";
 const StudioHost = dynamic(() => import("./studio-host"), {
   ssr: false,
   loading: () => (
@@ -48,16 +50,18 @@ export default function CockpitClient({
   context,
   initialState,
   invalidState,
-  ai,
+  aiOff: off,
 }: {
   context: CockpitContext;
   initialState?: unknown;
   invalidState: boolean;
-  ai: boolean;
+  aiOff?: AiOff;
 }) {
+  const ai = !off;
   const narrow = useMedia("(max-width: 719px)", true),
     preferredDark = useMedia("(prefers-color-scheme: dark)", false),
-    theme = useThemeChoice();
+    theme = useThemeChoice(),
+    readOnly = useReadOnly();
   const [custom, setCustom] = useState(false),
     [generation, setGeneration] = useState(0),
     [state, setState] = useState(initialState),
@@ -81,6 +85,11 @@ export default function CockpitClient({
     setPageId((next as { selectedPageId: string }).selectedPageId);
     latest.current = next;
     clearTimeout(timer.current);
+    // Read-only demo layouts stay in this browser.
+    if (readOnly) {
+      setMessage("Layout changes stay in this browser");
+      return;
+    }
     setMessage("Saving layout…");
     timer.current = setTimeout(() => {
       queue.current = queue.current
@@ -91,7 +100,7 @@ export default function CockpitClient({
         () => setMessage("Layout could not be saved. Please retry."),
       );
     }, 1500);
-  }, []);
+  }, [readOnly]);
   const reset = async () => {
     clearTimeout(timer.current);
     await queue.current.catch(() => {});
@@ -232,9 +241,17 @@ export default function CockpitClient({
       </div>
       {(!ai || recovered) && (
         <div className="flex flex-col gap-2" style={{ padding: "10px clamp(16px, 2vw, 24px) 0" }}>
-          {!ai && (
+          {off && (
             <p className="caption" style={{ fontSize: 13.5 }}>
-              The analyst is unavailable in this deployment. Your charts and tables still work.
+              {aiOff(off)}
+              {off === "connect" && !readOnly && (
+                <>
+                  {" "}
+                  <Link href="/m/onboarding/connect" style={{ fontWeight: 600 }}>
+                    Connect PayPal
+                  </Link>
+                </>
+              )}
             </p>
           )}
           {recovered && (

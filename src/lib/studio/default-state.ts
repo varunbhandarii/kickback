@@ -93,7 +93,7 @@ export function defaultState(
                 "spend_90d",
                 "progress_current",
                 "progress_target",
-                "status",
+                "status_label",
                 "is_demo",
               ].map((x) => field("customers." + x)),
             },
@@ -107,7 +107,7 @@ export function defaultState(
             dataMapping: {
               cols: [
                 "customer_label",
-                "state",
+                "state_label",
                 "amount",
                 "created_at",
                 "guard_score",
@@ -225,7 +225,7 @@ export function defaultState(
         type: "grid",
         dataMapping: {
           cols: [
-            "state",
+            "state_label",
             "amount",
             "created_at",
             "guard_score",

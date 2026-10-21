@@ -46,6 +46,7 @@ import {
   rewardReason,
   type Tone,
 } from "@/lib/copy";
+import { DemoLock } from "@/components/demo-lock";
 export const metadata = { title: "Overview" };
 const steps = [
   ["business", "Business"],
@@ -65,7 +66,13 @@ type InboxItem = {
 };
 /** The last 30 local days, oldest first, for the sparklines. */
 function lastDays(tz: string, now = Date.now()) {
-  return [...new Set(Array.from({ length: 30 }, (_, i) => localDay(new Date(now - (29 - i) * 86400000), tz)))];
+  return [
+    ...new Set(
+      Array.from({ length: 30 }, (_, i) =>
+        localDay(new Date(now - (29 - i) * 86400000), tz),
+      ),
+    ),
+  ];
 }
 export default async function Dashboard() {
   const { merchant } = await requireMerchant(),
@@ -262,9 +269,11 @@ export default async function Dashboard() {
   const setupDone = merchant.onboardingStep === "done";
   const notesNeedUpdate =
     !!spec &&
-    [spec.noteTemplate, ...(spec.noteVariants ?? []), ...(spec.welcomeBackNote ? [spec.welcomeBackNote] : [])].some(
-      (n) => !/loyalty reward/i.test(n),
-    );
+    [
+      spec.noteTemplate,
+      ...(spec.noteVariants ?? []),
+      ...(spec.welcomeBackNote ? [spec.welcomeBackNote] : []),
+    ].some((n) => !/loyalty reward/i.test(n));
 
   const inbox: InboxItem[] = [];
   for (const r of needs.filter((r) => r.state === "HELD"))
@@ -344,7 +353,9 @@ export default async function Dashboard() {
 
   const ideaCard =
     idea && idea.run.expiresAt > new Date()
-      ? (idea.run.result as DesignResult).cards.find((c) => c.params.id === idea.suggestion.candidateId)
+      ? (idea.run.result as DesignResult).cards.find(
+          (c) => c.params.id === idea.suggestion.candidateId,
+        )
       : undefined;
 
   return (
@@ -356,32 +367,43 @@ export default async function Dashboard() {
           <>
             <StatusChip tone={status.tone} label={status.label} />
             {connected && active && (
-              <form action={toggleRewards}>
-                <input name="merchantId" type="hidden" value={merchant.id} />
-                <input name="paused" type="hidden" value={merchant.rewardsPaused ? "no" : "yes"} />
-                {merchant.rewardsPaused ? (
-                  <SubmitButton className="btn btn-primary">
-                    <Icon name="play" size={16} />
-                    Resume rewards
-                  </SubmitButton>
-                ) : (
-                  <ConfirmButton
-                    title={`Pause rewards at ${merchant.displayName}?`}
-                    body={
-                      <p>
-                        Customers can still pay and their visits still count. Earned rewards wait and are sent
-                        after you resume.
-                      </p>
-                    }
-                    confirmLabel="Pause rewards"
-                  >
-                    <Icon name="pause" size={16} />
-                    Pause rewards
-                  </ConfirmButton>
-                )}
-              </form>
+              <DemoLock>
+                <form action={toggleRewards}>
+                  <input name="merchantId" type="hidden" value={merchant.id} />
+                  <input
+                    name="paused"
+                    type="hidden"
+                    value={merchant.rewardsPaused ? "no" : "yes"}
+                  />
+                  {merchant.rewardsPaused ? (
+                    <SubmitButton className="btn btn-primary">
+                      <Icon name="play" size={16} />
+                      Resume rewards
+                    </SubmitButton>
+                  ) : (
+                    <ConfirmButton
+                      title={`Pause rewards at ${merchant.displayName}?`}
+                      body={
+                        <p>
+                          Customers can still pay and their visits still count.
+                          Earned rewards wait and are sent after you resume.
+                        </p>
+                      }
+                      confirmLabel="Pause rewards"
+                    >
+                      <Icon name="pause" size={16} />
+                      Pause rewards
+                    </ConfirmButton>
+                  )}
+                </form>
+              </DemoLock>
             )}
-            <a className="btn btn-ghost" href={`/pay/${merchant.slug}`} target="_blank" rel="noopener">
+            <a
+              className="btn btn-ghost"
+              href={`/pay/${merchant.slug}`}
+              target="_blank"
+              rel="noopener"
+            >
               Open pay page
               <Icon name="external" size={16} />
             </a>
@@ -395,7 +417,8 @@ export default async function Dashboard() {
             Demo data
           </Chip>
           <span className="min-w-0 flex-1">
-            {fixtureCount.n} synthetic visits are included so backtests have history. They never earn refunds.
+            {fixtureCount.n} synthetic visits are included so backtests have
+            history. They never earn refunds.
           </span>
           <Link href="/m/cockpit" prefetch={false}>
             Filter them out in Cockpit
@@ -404,7 +427,10 @@ export default async function Dashboard() {
       )}
 
       {!setupDone && (
-        <section className="card card-pad flex flex-col gap-4" aria-labelledby="setup-title">
+        <section
+          className="card card-pad flex flex-col gap-4"
+          aria-labelledby="setup-title"
+        >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 id="setup-title" className="card-title">
@@ -422,7 +448,16 @@ export default async function Dashboard() {
           <ol className="flex flex-wrap gap-2">
             {steps.map(([key, label], i) => (
               <li key={key}>
-                <Chip tone={i < stepIndex ? "success" : i === stepIndex ? "info" : "neutral"} icon={i < stepIndex ? "check" : undefined}>
+                <Chip
+                  tone={
+                    i < stepIndex
+                      ? "success"
+                      : i === stepIndex
+                        ? "info"
+                        : "neutral"
+                  }
+                  icon={i < stepIndex ? "check" : undefined}
+                >
                   {label}
                 </Chip>
               </li>
@@ -439,22 +474,38 @@ export default async function Dashboard() {
                 <StatusChip tone={item.tone} label={item.chip} size="sm" />
                 <div className="inbox-body">
                   <span className="inbox-title">{item.title}</span>
-                  {item.detail && <span className="inbox-detail">{item.detail}</span>}
+                  {item.detail && (
+                    <span className="inbox-detail">{item.detail}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {item.action && (
-                    <Link href={item.action.href} className="btn btn-secondary btn-sm">
+                    <Link
+                      href={item.action.href}
+                      className="btn btn-secondary btn-sm"
+                    >
                       {item.action.label}
                     </Link>
                   )}
                   {item.dismiss && (
-                    <form action={dismissNotice}>
-                      <input type="hidden" name="merchantId" value={merchant.id} />
-                      <input type="hidden" name="id" value={item.dismiss} />
-                      <button type="submit" className="icon-btn icon-btn-plain" aria-label="Dismiss notice" title="Dismiss">
-                        <Icon name="x" size={16} />
-                      </button>
-                    </form>
+                    <DemoLock>
+                      <form action={dismissNotice}>
+                        <input
+                          type="hidden"
+                          name="merchantId"
+                          value={merchant.id}
+                        />
+                        <input type="hidden" name="id" value={item.dismiss} />
+                        <button
+                          type="submit"
+                          className="icon-btn icon-btn-plain"
+                          aria-label="Dismiss notice"
+                          title="Dismiss"
+                        >
+                          <Icon name="x" size={16} />
+                        </button>
+                      </form>
+                    </DemoLock>
                   )}
                 </div>
               </li>
@@ -467,13 +518,31 @@ export default async function Dashboard() {
 
       <Section title="Last 30 days" id="kpis">
         <div className="kpi-grid">
-          <Kpi label="Rewards sent" value={money(paid.cents)} sub={`${paid.count} reward${paid.count === 1 ? "" : "s"}`}>
-            <Sparkline values={rewardSeries} label={`Rewards sent per day, last 30 days. Total ${money(paid.cents)}.`} />
+          <Kpi
+            label="Rewards sent"
+            value={money(paid.cents)}
+            sub={`${paid.count} reward${paid.count === 1 ? "" : "s"}`}
+          >
+            <Sparkline
+              values={rewardSeries}
+              label={`Rewards sent per day, last 30 days. Total ${money(paid.cents)}.`}
+            />
           </Kpi>
-          <Kpi label="Visits" value={kpi.visits.toLocaleString("en-US")} sub={`${kpi.customers} customers`}>
-            <Sparkline values={visitSeries} label={`Visits per day, last 30 days. Total ${kpi.visits}.`} />
+          <Kpi
+            label="Visits"
+            value={kpi.visits.toLocaleString("en-US")}
+            sub={`${kpi.customers} customers`}
+          >
+            <Sparkline
+              values={visitSeries}
+              label={`Visits per day, last 30 days. Total ${kpi.visits}.`}
+            />
           </Kpi>
-          <Kpi label="Regulars" value={regulars.length} sub={`of ${kpi.customers} recognized`}>
+          <Kpi
+            label="Regulars"
+            value={regulars.length}
+            sub={`of ${kpi.customers} recognized`}
+          >
             <Meter
               value={regulars.length}
               max={Math.max(1, kpi.customers)}
@@ -494,7 +563,11 @@ export default async function Dashboard() {
             />
           </Kpi>
           {kpi.revenue > 0 && (
-            <Kpi label="Reward cost of PayPal revenue" value={pct(costRatio)} sub={`of ${money(kpi.revenue)}`}>
+            <Kpi
+              label="Reward cost of PayPal revenue"
+              value={pct(costRatio)}
+              sub={`of ${money(kpi.revenue)}`}
+            >
               <Meter
                 value={costRatio}
                 max={0.06}
@@ -512,12 +585,21 @@ export default async function Dashboard() {
         </div>
       </Section>
 
-      <div className="grid items-start gap-6" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}>
+      <div
+        className="grid items-start gap-6"
+        style={{
+          gridTemplateColumns:
+            "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
+        }}
+      >
         <Section
           title="Closest to a reward"
           id="closest"
           action={
-            <Link href="/m/customers?filter=close" style={{ fontSize: 14, fontWeight: 600 }}>
+            <Link
+              href="/m/customers?filter=close"
+              style={{ fontSize: 14, fontWeight: 600 }}
+            >
               All customers
             </Link>
           }
@@ -529,7 +611,11 @@ export default async function Dashboard() {
                 return (
                   <li key={c.key} className="inbox-row">
                     <div className="inbox-body" style={{ flexBasis: 140 }}>
-                      <Link href={`/m/customers?customer=${encodeURIComponent(c.key)}`} className="mono inbox-title" style={{ color: "var(--ink)" }}>
+                      <Link
+                        href={`/m/customers?customer=${encodeURIComponent(c.key)}`}
+                        className="mono inbox-title"
+                        style={{ color: "var(--ink)" }}
+                      >
                         {customerCode(c.key)}
                       </Link>
                       <span className="inbox-detail">
@@ -537,55 +623,99 @@ export default async function Dashboard() {
                         {c.demo && " · demo"}
                       </span>
                     </div>
-                    <MiniProgress type={p.type} current={p.current} target={p.target} rewardCents={p.rewardCents} />
+                    <MiniProgress
+                      type={p.type}
+                      current={p.current}
+                      target={p.target}
+                      rewardCents={p.rewardCents}
+                    />
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <p className="card card-pad muted">No one has started a card yet. Visits show up here after the first payment.</p>
+            <p className="card card-pad muted">
+              No one has started a card yet. Visits show up here after the first
+              payment.
+            </p>
           )}
         </Section>
 
         <div className="flex flex-col gap-6">
           <DigestCard merchantId={merchant.id} />
           {ideaCard && idea && (
-            <section className="card card-tint card-pad flex flex-col gap-3" aria-labelledby="idea-title">
+            <section
+              className="card card-tint card-pad flex flex-col gap-3"
+              aria-labelledby="idea-title"
+            >
               <p className="eyebrow" style={{ color: "var(--forest)" }}>
-                <Icon name="sparkles" size={14} style={{ display: "inline", verticalAlign: "-2px", marginRight: 6 }} />
+                <Icon
+                  name="sparkles"
+                  size={14}
+                  style={{
+                    display: "inline",
+                    verticalAlign: "-2px",
+                    marginRight: 6,
+                  }}
+                />
                 Idea for next month
               </p>
               <h2 id="idea-title" className="card-title">
                 {ideaCard.params.name}
               </h2>
-              <p className="text-2" style={{ fontSize: 14.5, lineHeight: 1.55 }}>
+              <p
+                className="text-2"
+                style={{ fontSize: 14.5, lineHeight: 1.55 }}
+              >
                 {ideaCard.explanation.pitch}
               </p>
               <div className="form-actions">
-                <Link href={`/m/program?suggestion=${idea.suggestion.id}`} className="btn btn-primary btn-sm">
+                <Link
+                  href={`/m/program?suggestion=${idea.suggestion.id}`}
+                  className="btn btn-primary btn-sm"
+                >
                   Review the idea
                 </Link>
-                <form action={dismissIdea}>
-                  <input type="hidden" name="merchantId" value={merchant.id} />
-                  <input type="hidden" name="id" value={idea.suggestion.id} />
-                  <SubmitButton className="btn btn-ghost btn-sm">Not now</SubmitButton>
-                </form>
+                <DemoLock>
+                  <form action={dismissIdea}>
+                    <input
+                      type="hidden"
+                      name="merchantId"
+                      value={merchant.id}
+                    />
+                    <input type="hidden" name="id" value={idea.suggestion.id} />
+                    <SubmitButton className="btn btn-ghost btn-sm">
+                      Not now
+                    </SubmitButton>
+                  </form>
+                </DemoLock>
               </div>
             </section>
           )}
           {spec && (
-            <section className="card card-pad flex flex-col gap-3" aria-labelledby="program-title">
+            <section
+              className="card card-pad flex flex-col gap-3"
+              aria-labelledby="program-title"
+            >
               <div className="flex items-center justify-between gap-3">
                 <p className="eyebrow">Your program</p>
-                <Link href="/m/program" style={{ fontSize: 14, fontWeight: 600 }}>
+                <Link
+                  href="/m/program"
+                  style={{ fontSize: 14, fontWeight: 600 }}
+                >
                   Open program
                 </Link>
               </div>
-              <h2 id="program-title" className="display" style={{ fontSize: 20 }}>
+              <h2
+                id="program-title"
+                className="display"
+                style={{ fontSize: 20 }}
+              >
                 {programHeadline(spec)}
               </h2>
               <p className="caption" style={{ fontSize: 13.5 }}>
-                Daily budget {money(spec.dailyBudgetCents)} · monthly {money(spec.monthlyBudgetCents)} · up to{" "}
+                Daily budget {money(spec.dailyBudgetCents)} · monthly{" "}
+                {money(spec.monthlyBudgetCents)} · up to{" "}
                 {money(spec.perCustomerMonthlyCapCents)} per customer each month
               </p>
             </section>

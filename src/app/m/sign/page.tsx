@@ -7,6 +7,7 @@ import { SignSheet } from "@/app/pay/[slug]/sign/sign-sheet";
 import { PageHeader, PunchRow, SpendBar } from "@/components/ui";
 import { Endorsement } from "@/components/brand";
 import { money, programHeadline } from "@/lib/format";
+import { DemoLock } from "@/components/demo-lock";
 export default async function SignPage() {
   const { merchant } = await requireMerchant(),
     loaded = await loadMerchant(merchant.slug, true),
@@ -18,7 +19,9 @@ export default async function SignPage() {
       <PageHeader title="Pay page and sign" sub="What customers see when they scan the sign on your counter." />
       <div className="grid items-start gap-6" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))" }}>
         <div className="flex min-w-0 flex-col gap-6">
-          <MenuForm merchantId={merchant.id} initial={merchant.menu} minTicketCents={spec?.minTicketCents} />
+          <DemoLock>
+            <MenuForm merchantId={merchant.id} initial={merchant.menu} minTicketCents={spec?.minTicketCents} />
+          </DemoLock>
           <section className="card card-pad flex flex-col gap-3" aria-labelledby="share-title">
             <div>
               <h2 id="share-title" className="card-title">

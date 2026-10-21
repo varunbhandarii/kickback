@@ -3,12 +3,12 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { connections } from "@/db/schema";
-import { requireMerchant } from "@/lib/dal";
+import { requireOwnerMerchant } from "@/lib/dal";
 import ConnectForms from "./connect-forms";
 import ConnectionStatus from "./connection-status";
 import { Icon } from "@/components/icons";
 export default async function Connect() {
-  const { merchant } = await requireMerchant(),
+  const { merchant } = await requireOwnerMerchant(),
     [connection] = await getDb()
       .select()
       .from(connections)

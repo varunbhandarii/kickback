@@ -7,6 +7,9 @@ import { proposeDesign } from "./ai-actions";
 import { Chip, Meter, PunchRow, SpendBar } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { programHeadline } from "@/lib/format";
+import { useReadOnly } from "@/components/demo-lock";
+import type { AiOff } from "@/lib/copy";
+import Link from "next/link";
 const money = (cents: number) => "$" + (cents / 100).toFixed(2),
   percent = (ratio: number) => (ratio * 100).toFixed(1) + "%";
 const audience = { light: "Occasional visitors", all: "Everyone", heavy: "Frequent regulars" } as const;
@@ -18,12 +21,14 @@ const goals = [
 export default function DesignerPanel({
   merchantId,
   enabled,
+  off,
   margin,
   onUse,
   initial,
 }: {
   merchantId: string;
   enabled: boolean;
+  off?: AiOff;
   margin: number;
   onUse: (
     spec: ProgramSpec,
@@ -33,6 +38,7 @@ export default function DesignerPanel({
   ) => void;
   initial?: DesignResult & { id: string };
 }) {
+  const readOnly = useReadOnly();
   const [result, setResult] = useState(initial),
     [error, setError] = useState(""),
     [lift, setLift] = useState(initial?.input.liftAssumptionPct ?? 5),
@@ -136,7 +142,7 @@ export default function DesignerPanel({
           </label>
         </div>
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={pending || !enabled} aria-busy={pending || undefined}>
+          <button type="submit" className="btn btn-primary" disabled={pending || !enabled || readOnly} aria-busy={pending || undefined}>
             {pending ? <span className="spinner" aria-hidden="true" /> : <Icon name="sparkles" size={16} />}
             {pending ? "Designing three programs…" : "Propose three programs"}
           </button>
@@ -145,9 +151,25 @@ export default function DesignerPanel({
               Reading your history, proposing, simulating and explaining…
             </span>
           )}
-          {!enabled && (
+          {readOnly && (
             <span className="caption" style={{ fontSize: 14 }}>
-              AI is unavailable. Presets and template copy still work.
+              Proposals are turned off in the read-only demo.
+            </span>
+          )}
+          {!enabled && !readOnly && (
+            <span className="caption" style={{ fontSize: 14 }}>
+              {off === "connect" ? (
+                <>
+                  <Link href="/m/onboarding/connect" style={{ fontWeight: 600 }}>
+                    Connect PayPal
+                  </Link>{" "}
+                  to get proposals. Presets and backtests still work.
+                </>
+              ) : off === "budget" ? (
+                "The Designer is resting until tomorrow. Presets and backtests still work."
+              ) : (
+                "AI is unavailable. Presets and template copy still work."
+              )}
             </span>
           )}
         </div>

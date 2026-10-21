@@ -31,7 +31,7 @@ export async function submitMenu(
   }
   revalidatePath(`/pay/${merchant.slug}`);
   revalidatePath("/m/sign");
-  if (form.get("finish") === "yes") redirect("/m");
+  if (form.get("finish") === "yes") redirect("/m/onboarding/done");
   return { message: "Menu saved." };
 }
 export async function downloadSign(form: FormData) {

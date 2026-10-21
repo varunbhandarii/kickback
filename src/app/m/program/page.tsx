@@ -5,7 +5,7 @@ import { getDb } from "@/db";
 import { programs } from "@/db/schema";
 import { requireMerchant } from "@/lib/dal";
 import { loadMerchant } from "@/lib/merchants";
-import { aiEnabled } from "@/lib/ai/client";
+import { aiBlocker } from "@/lib/ai/client";
 import { prior } from "@/lib/ai/designer/context";
 import { loadProgram, type ProgramSpec } from "@/lib/engine/program";
 import ProgramForm from "../onboarding/program/program-form";
@@ -71,7 +71,8 @@ export default async function ProgramOverview({
 }) {
   const { merchant } = await requireMerchant(),
     query = await searchParams,
-    loaded = await loadMerchant(merchant.slug, true);
+    loaded = await loadMerchant(merchant.slug, true),
+    aiOff = (await aiBlocker(merchant)) ?? undefined;
   if (!loaded)
     return (
       <>
@@ -190,7 +191,8 @@ export default async function ProgramOverview({
           merchantId={merchant.id}
           category={merchant.category}
           initial={start.initial}
-          aiEnabled={aiEnabled()}
+          aiEnabled={!aiOff}
+          aiOff={aiOff}
           margin={prior(merchant.category).marginPct}
           initialDesign={start.initialDesign}
           merchantName={merchant.displayName}

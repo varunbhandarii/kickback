@@ -9,6 +9,7 @@ import { Icon, type IconName } from "../icons";
 import { Popover } from "./popover";
 import { ThemeSwitch } from "./theme-switch";
 import { Toaster } from "../toast";
+import { ReadOnlyProvider } from "../demo-lock";
 
 type Business = { id: string; name: string };
 type NavItem = {
@@ -26,6 +27,7 @@ export function AppShell({
   current,
   sandbox,
   reviewCount,
+  readOnly = false,
   children,
 }: {
   user: { name: string; email: string };
@@ -33,6 +35,7 @@ export function AppShell({
   current?: Business & { slug: string };
   sandbox: boolean;
   reviewCount: number;
+  readOnly?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -82,7 +85,7 @@ export function AppShell({
         </nav>
         <div className="sidebar-foot">
           <NavLink item={help} current={active(help)} />
-          <AccountMenu user={user} placement="up" />
+          <AccountMenu user={user} placement="up" readOnly={readOnly} />
         </div>
       </aside>
 
@@ -92,11 +95,14 @@ export function AppShell({
         </Link>
         <div className="min-w-0 flex-1">{current && <BusinessSwitcher businesses={businesses} current={current} compact />}</div>
         {sandbox && <span className="chip chip-demo chip-sm">Sandbox</span>}
-        <AccountMenu user={user} placement="down" compact />
+        <AccountMenu user={user} placement="down" compact readOnly={readOnly} />
       </header>
 
       <main id="main" className="main" tabIndex={-1}>
-        <div className={`main-inner${rail ? " main-wide" : ""}`}>{children}</div>
+        {readOnly && <DemoBanner shop={current?.name} />}
+        <ReadOnlyProvider value={readOnly}>
+          <div className={`main-inner${rail ? " main-wide" : ""}`}>{children}</div>
+        </ReadOnlyProvider>
       </main>
 
       <nav aria-label="Tabs" className="bottom-tabs">
@@ -144,6 +150,24 @@ export function AppShell({
         </Popover>
       </nav>
       <Toaster />
+    </div>
+  );
+}
+
+/** Sticky notice for the read-only demo session. */
+function DemoBanner({ shop }: { shop?: string }) {
+  return (
+    <div className="demo-banner" role="note">
+      <Icon name="lock" size={16} />
+      <span className="min-w-0 flex-1">
+        You&apos;re exploring {shop ?? "a demo shop"} in a read-only demo. Changes are turned off; the
+        Analyst and backtests still work.
+      </span>
+      <form action={signOut}>
+        <button type="submit" className="btn btn-sm btn-on-band">
+          Leave demo
+        </button>
+      </form>
     </div>
   );
 }
@@ -236,12 +260,14 @@ function AccountMenu({
   user,
   placement,
   compact = false,
+  readOnly = false,
 }: {
   user: { name: string; email: string };
   placement: "up" | "down";
   compact?: boolean;
+  readOnly?: boolean;
 }) {
-  const name = user.name || user.email;
+  const name = readOnly ? "Demo visitor" : user.name || user.email;
   return (
     <Popover
       label="Account"
@@ -261,9 +287,9 @@ function AccountMenu({
       }
     >
       <div style={{ padding: "8px 10px 10px" }}>
-        <p className="caption">Signed in as</p>
+        <p className="caption">{readOnly ? "Read-only demo" : "Signed in as"}</p>
         <p className="truncate" style={{ fontSize: 14, fontWeight: 600 }}>
-          {user.email}
+          {readOnly ? "Changes are turned off" : user.email}
         </p>
       </div>
       <p className="menu-label">Theme</p>
@@ -271,14 +297,16 @@ function AccountMenu({
         <ThemeSwitch />
       </div>
       <div className="menu-divider" role="separator" />
-      <Link className="menu-item" href="/m/settings">
-        <Icon name="settings" size={16} />
-        Settings
-      </Link>
+      {!readOnly && (
+        <Link className="menu-item" href="/m/settings">
+          <Icon name="settings" size={16} />
+          Settings
+        </Link>
+      )}
       <form action={signOut}>
         <button type="submit" className="menu-item">
           <Icon name="logOut" size={16} />
-          Sign out
+          {readOnly ? "Leave demo" : "Sign out"}
         </button>
       </form>
     </Popover>

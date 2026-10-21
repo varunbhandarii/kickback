@@ -25,6 +25,7 @@ import type { CockpitContext } from "@/lib/studio/context";
 if (process.env.NODE_ENV !== "production") enableStudioDevValidations();
 const modules = [AgStudioAiModule],
   layout = { minWidth: 720 };
+const localeText = { panelTitleAi: "Analyst" };
 export default function StudioHost({
   context,
   initialState,
@@ -137,6 +138,7 @@ export default function StudioHost({
           theme={cockpitTheme}
           ai={ai}
           aiToolDisplay={toolDisplay}
+          localeText={localeText}
           onStateUpdated={update}
           onErrorRaised={error}
           onApiReady={ready}

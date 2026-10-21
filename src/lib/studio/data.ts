@@ -1,6 +1,12 @@
 import type { AgDataSourcesDefinition, AgFieldDefinition } from "ag-studio";
 import { sourceFields, tableDescriptions, type StudioTable } from "./sources";
 import type { KickbackRegistry } from "./widgets/registry";
+/** Readable labels sit next to the stored codes, which filters keep using. */
+const fieldNames: Record<string, string> = {
+  state_label: "reward status",
+  state: "reward state code",
+  status_label: "customer status",
+};
 export function cockpitData(): AgDataSourcesDefinition<KickbackRegistry> {
   const formats: Record<string, AgFieldDefinition<KickbackRegistry>["format"]> =
     {
@@ -28,7 +34,7 @@ export function cockpitData(): AgDataSourcesDefinition<KickbackRegistry> {
           description: tableDescriptions[id],
           fields: Object.entries(sourceFields[id]).map(([name, kind]) => ({
             id: name,
-            name: name.replaceAll("_", " "),
+            name: fieldNames[name] ?? name.replaceAll("_", " "),
             format: formats[kind],
             hide: ["key", "id", "customer_key"].includes(name),
             ...(kind === "currency"
@@ -36,7 +42,9 @@ export function cockpitData(): AgDataSourcesDefinition<KickbackRegistry> {
               : {}),
             ...([
               "status",
+              "status_label",
               "state",
+              "state_label",
               "source",
               "wallet",
               "weekday",

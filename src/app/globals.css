@@ -675,6 +675,38 @@ input[type="range"] {
   }
 }
 
+/* Read-only demo */
+.demo-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: -28px calc(-1 * clamp(16px, 3vw, 40px)) 20px;
+  padding: 10px clamp(16px, 3vw, 40px);
+  background: var(--band);
+  color: var(--on-band);
+  font-size: 14px;
+  font-weight: 500;
+}
+.cockpit-shell .demo-banner {
+  margin: 0;
+}
+.demo-lock {
+  display: contents;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+@media (max-width: 719px) {
+  .demo-banner {
+    top: 57px;
+  }
+}
+
 /* Confirmation dialog */
 .dialog {
   width: min(440px, calc(100vw - 32px));

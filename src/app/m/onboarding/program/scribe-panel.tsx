@@ -3,6 +3,7 @@ import { useState, useTransition } from "react";
 import type { ProgramSpec } from "@/lib/engine/program";
 import { writeCopy } from "./ai-actions";
 import { Icon } from "@/components/icons";
+import { useReadOnly } from "@/components/demo-lock";
 export default function ScribePanel({
   merchantId,
   spec,
@@ -12,6 +13,7 @@ export default function ScribePanel({
   spec: ProgramSpec;
   onUse: (spec: ProgramSpec, id: string) => void;
 }) {
+  const readOnly = useReadOnly();
   const [error, setError] = useState(""),
     [pending, start] = useTransition();
   return (
@@ -23,7 +25,7 @@ export default function ScribePanel({
       <button
         type="button"
         className="btn btn-tint btn-sm self-start"
-        disabled={pending}
+        disabled={pending || readOnly}
         aria-busy={pending || undefined}
         onClick={() =>
           start(async () => {

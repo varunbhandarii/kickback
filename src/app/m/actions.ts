@@ -3,18 +3,19 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
-import { ownedMerchant, requireUser } from "@/lib/dal";
+import { memberMerchant, requireUser } from "@/lib/dal";
 import { requireFormMerchant } from "@/lib/merchant-form";
 import {
   disconnectMerchant,
   setRewardsPaused,
   setStaff,
+  ProtectedDemoTenant,
 } from "@/lib/merchant-actions";
 import { saveBusiness } from "@/lib/onboarding";
 export async function selectBusiness(form: FormData) {
   const user = await requireUser(),
     id = String(form.get("merchant"));
-  if (!(await ownedMerchant(user.id, id)))
+  if (!(await memberMerchant(user.id, id, ["OWNER", "VIEWER"])))
     throw new Error("Business access denied");
   (await cookies()).set("kickback.merchant", id, {
     httpOnly: true,
@@ -79,7 +80,16 @@ export async function disconnectAction(
   const { user, merchant } = await requireFormMerchant(form);
   if (form.get("confirm") !== "DISCONNECT")
     return { error: "Type DISCONNECT to confirm." };
-  await disconnectMerchant(user.id, merchant.id);
+  try {
+    await disconnectMerchant(user.id, merchant.id);
+  } catch (e) {
+    if (e instanceof ProtectedDemoTenant)
+      return {
+        error:
+          "This demo business stays connected. Pause rewards instead if you need to stop payouts.",
+      };
+    throw e;
+  }
   revalidatePath("/m");
   redirect("/m/settings?disconnected=1");
 }
