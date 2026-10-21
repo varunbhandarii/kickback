@@ -6,9 +6,13 @@ Pay at a merchant, collect qualifying visits, and receive a thank-you partial re
 
 ## Try it
 
-Open [Rosa's Cafe](https://kickback-web.onrender.com/pay/rosas), choose a menu item or custom amount, and pay using a US PayPal sandbox buyer. The thank-you screen shows your progress and a private link to check it between visits. Five qualifying visits within 60 days earn $2 back; purchases within 120 minutes count as one visit. Venmo appears when the device and buyer are eligible.
+Open the [demo page](https://kickback-web.onrender.com/demo) and pick one of three paths. Everything runs in PayPal sandbox with test balances.
 
-Read the [program terms](https://kickback-web.onrender.com/pay/rosas/terms). The [printable sign](https://kickback-web.onrender.com/pay/rosas/sign) and [QR image](https://kickback-web.onrender.com/api/pay/rosas/qr.png) point to checkout.
+- **Watch a reward happen** (no sign-in, about 45 seconds). A demo customer at visit 4 of 5 pays Rosa's Cafe through a saved sandbox wallet. You see the visit counted, Guard clear the reward, and the $2 partial refund go back with the note PayPal stored.
+- **Pay as a customer** (about 3 minutes, phone or desktop). Get a demo buyer login on the demo page, open [Rosa's Cafe](https://kickback-web.onrender.com/pay/rosas), pick any item from $3.00 and pay with PayPal. Your purchase is the buyer's fifth visit, so the thank-you screen shows the reward. See [demo accounts](docs/demo-accounts.md).
+- **Explore the merchant app** (read-only). Look around Rosa's Cafe, Bright Salon and Loaf Bakery as their owner sees them, including the Cockpit and its Analyst. Changes are turned off.
+
+Five qualifying visits within 60 days earn $2 back; purchases within 120 minutes count as one visit. Read the [program terms](https://kickback-web.onrender.com/pay/rosas/terms). The [printable sign](https://kickback-web.onrender.com/pay/rosas/sign) and [QR image](https://kickback-web.onrender.com/api/pay/rosas/qr.png) point to checkout. [Service status](https://kickback-web.onrender.com/status) shows whether the demo is healthy. To try it with your own sandbox business, see [Bring your own sandbox business](docs/setup.md#bring-your-own-sandbox-business).
 
 ## Connect your business
 
@@ -90,7 +94,7 @@ Demo businesses can include labeled synthetic history for the design step. These
 
 ## Integrations and privacy
 
-PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10, and a 40-per-minute refill per process. AG Studio provides the merchant Cockpit with labeled demo history; Anthropic powers validated program proposals, metric-grounded explanations and thank-you copy. Render hosts Next.js, Postgres, and the recovery worker.
+PayPal Orders v2 creates and captures payments; Payments v2 issues refunds; Partner Referrals obtains merchant consent. The REST client caches OAuth tokens and uses priority lanes, a burst of 10 and a per-service refill (web 28, cron 12 and workflows 5 requests per minute, because PayPal's sandbox limits requests per IP); after a 429 it holds background work for five minutes. AG Studio provides the merchant Cockpit with labeled demo history; Anthropic powers validated program proposals, metric-grounded explanations and thank-you copy. Render hosts Next.js, Postgres, and the recovery worker.
 
 The loyalty ledger stores merchant-specific HMAC keys and payment identifiers, never provider account IDs, names, email addresses, phone numbers, or Venmo usernames. This pseudonymous ledger remains linkable; it is not a claim of anonymity or a provider-policy exemption. Raw webhook payloads expire after 47 hours and are purged every five minutes, with alerts for retention over 48 hours. Production retention, consent, provider approvals, and deployment licenses must be established before live use. See [architecture](docs/architecture.md) and [privacy](docs/privacy.md).
 

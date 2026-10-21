@@ -47,7 +47,7 @@ To enable PayPal sign-in, configure Log in with PayPal on the platform app with 
 | `KICKBACK_MASTER_KEY`                                            | 32 random bytes in standard Base64; identity, encryption, tokens                 |
 | `JOBS_BEARER`                                                    | At least 32 characters for operator APIs                                         |
 | `PG_POOL_MAX`                                                    | Web 5; cron 2                                                                    |
-| `PAYPAL_RATE_PER_MIN`                                            | 1–40, default 40; burst 10, per process                                          |
+| `PAYPAL_RATE_PER_MIN`                                            | 1–40, default 40; burst 10, per process. Hosted: web 28, cron 12, workflows 5     |
 | `KICKBACK_PAUSE_REWARDS`                                         | Global environment kill switch                                                   |
 | `REWARD_SETTLE_IMMEDIATE`                                        | Default true; false leaves refunds to the sweep                                  |
 | `DEMO_MODE`                                                      | Enables sandbox tools; ordinary pay routes stay available                        |
@@ -62,6 +62,14 @@ To enable PayPal sign-in, configure Log in with PayPal on the platform app with 
 | `TENANT_PURGE_HOURS`                                             | Default 48; a shorter value is sandbox-only for isolated deletion checks         |
 | `RECONCILE_INTERVAL_HOURS`, `BACKFILL_DAYS`                      | Default 6-hour reconciliation and 90-day history                                 |
 | `NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY`                              | Applicable Studio deployment license                                             |
+| `PUBLIC_SANDBOX_TOOLS`                                           | Local diagnostics such as `/dev/pay-test`; false on any public deployment        |
+| `DEMO_VIEWER_PASSWORD`                                           | Server-only password of the shared read-only visitor; generated, never shown     |
+| `DEMO_PATHS_ENABLED`, `DEMO_RUNS_PER_DAY`                        | Show the paying demo paths; daily cap on live runs (default 30)                  |
+| `DEMO_BUYER_CREDENTIALS_JSON`                                    | Published sandbox buyer logins shown on `/demo`, as `[{"email","password"}]`     |
+| `PROTECTED_DEMO_SLUGS`, `ALLOW_DEMO_TENANT_PURGE`                | Demo shops that disconnect and purge refuse; a one-off operator override         |
+| `AI_MAX_CALLS_GLOBAL_PER_DAY`, `AI_MAX_ANALYST_TURNS_GLOBAL_PER_DAY` | Platform-wide AI ceilings per UTC day (200 and 400)                          |
+| `AI_MAX_VIEWER_TURNS_PER_IP_PER_DAY`, `AI_MAX_VIEWER_TURNS_PER_DAY` | Analyst turns for demo visitors, per network and in total (15 and 150)        |
+| `BETTERSTACK_{JOBS,SOAK,RECONCILE}_HEARTBEAT_URL`, `STATUS_PAGE_URL` | Optional uptime heartbeats and the public uptime page link                    |
 
 ## PayPal setup
 
@@ -80,9 +88,28 @@ npm run webhook:register -- https://your-app.onrender.com
 7. For replay, sign into the Developer dashboard with your regular developer account, open the REST app associated with the sandbox merchant, and enable **Features → Payment capabilities → Save payment methods → Save Changes**. Sandbox buyer/business passwords are used at `sandbox.paypal.com`, not for the Developer dashboard.
 8. Obtain a merchant-specific saved wallet using the [Payment Method Tokens API](https://developer.paypal.com/api/payment-tokens/save-without-purchase/paypal/). In partner mode, create the `usage_type: MERCHANT` setup token with the platform credentials and that merchant's Auth-Assertion. The sandbox buyer approves the returned link; convert the approved setup token with the same merchant assertion. Store the payment token privately as `MERCHANT_ROSAS_VAULT_ID` (or the matching merchant variable). A token saved for the platform merchant is not interchangeable with a connected merchant's token. A feature checkbox or consent grant alone does not prove that the setup API is enabled; verify the actual setup response.
 
+## Bring your own sandbox business
+
+1. Create a free [PayPal developer account](https://developer.paypal.com/) and, under **Testing tools → Sandbox accounts**, a US **Business** account (and a US **Personal** buyer to pay with).
+2. [Sign up](https://kickback-web.onrender.com/sign-up) on Kickback, add your business and time zone, and choose **Connect with PayPal**. Sign in as your sandbox business account to grant consent; sandbox vetting is approved by default. Alternatively paste your own sandbox REST app credentials.
+3. Activate a program, add a menu, then pay your own pay page with the sandbox buyer.
+4. History import uses Transaction Search, which can lag up to three hours behind new sandbox payments.
+
+AI features (the Analyst and the Program Designer) turn on after PayPal is connected; presets, backtests and the Cockpit's charts work before that.
+
+## Demo operations
+
+The hosted demo keeps a pool of sandbox buyers ready for the **Watch** and **Pay as a customer** paths. Operator endpoints need the job bearer and sandbox demo mode:
+
+- `POST /api/admin/demo-buyers` with `{ "slot", "email", "purpose": "pay" | "watch", "published" }` registers a buyer; `GET` lists the pool without wallets.
+- `POST /api/admin/demo-buyers/<slot>/setup` returns a link the buyer approves once (signed in to `sandbox.paypal.com` as that buyer); `POST /api/admin/demo-buyers/<slot>/finish` saves the approved wallet, encrypted.
+- `POST /api/admin/demo/stage` runs one staging pass now (the cron does this every five minutes); `POST /api/admin/demo/pause` and `/resume` hide or show the paying paths without a deploy.
+
+Staging records a buyer's earlier visits as labeled sandbox replay purchases dated after its last visit, never today, and only marks the buyer ready when Guard would pay its next visit instantly. `/status` shows how many buyers are ready.
+
 ## Render deployment
 
-1. Create **kickback-shared** in the Render workspace before syncing the Blueprint. Add platform credentials, partner/BN/webhook IDs, `APP_URL`, merchant IDs, `KICKBACK_ENV=sandbox`, `PAYPAL_CONNECTION_MODE=partner`, `DEMO_MODE=true`, `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS=false`, `REWARD_SETTLE_IMMEDIATE=true`, and `PAYPAL_RATE_PER_MIN=40`.
+1. Create **kickback-shared** in the Render workspace before syncing the Blueprint. Add platform credentials, partner/BN/webhook IDs, `APP_URL`, merchant IDs, `KICKBACK_ENV=sandbox`, `PAYPAL_CONNECTION_MODE=partner`, `DEMO_MODE=true`, `KICKBACK_ALLOW_UNVERIFIED_WEBHOOKS=false`, `REWARD_SETTLE_IMMEDIATE=true`, and `PAYPAL_RATE_PER_MIN=40` (the Blueprint sets lower per-service values, which take precedence).
 2. Add one master key and job bearer. For an existing deployment, preserve its current values exactly. Only add merchant secrets when BYO mode is explicitly needed and authorized.
 3. Choose **New → Blueprint**, select the GitHub repository and `render.yaml`, and supply initial web values when prompted. It links web/cron to the group and creates Postgres. Set the group's `DATABASE_URL` to the database's internal URL after creation. Existing deployments use their existing URL. The web `fromDatabase` value takes precedence.
 4. Web pre-deploy runs migrations. Cron runs `npm run jobs` every five minutes with pool size 2. Web uses pool size 5 and a 60-second shutdown delay. Both require the same platform/master keys. Secrets never enter the YAML file.
