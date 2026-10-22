@@ -25,9 +25,15 @@ const RUN_GAP_MS = 3 * 60000;
 class RunProblem extends Error {}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Why a run can't start: switched off on purpose, out of capacity for now
+ * (no customer ready, daily caps), or something is actually broken.
+ */
+export type ClosedReason = "off" | "capacity" | "broken";
+type Closed = { message: string; reason: ClosedReason };
 export type StartResult =
   | { ok: true; id: string }
-  | { ok: false; error: string; lastRunId?: string };
+  | { ok: false; error: string; reason: ClosedReason; lastRunId?: string };
 
 /** The most recent run that ended with a confirmed or sent reward, to show when no buyer is free. */
 export async function lastGoodRun() {
@@ -64,52 +70,75 @@ export async function budgetLeftCents(slug: string) {
     merchant.spec.monthlyBudgetCents - used.monthlyUsedCents,
   );
 }
-/** Why the paying paths are closed right now, or undefined. Shared by `/demo` and the actions. */
-export async function demoPaymentsUnavailable() {
+async function paymentsClosed(): Promise<Closed | undefined> {
   const env = getEnv();
-  if (env.KICKBACK_ENV !== "sandbox" || !env.DEMO_MODE) return "The live demo is turned off on this deployment.";
-  if (await demoPathsOff()) return "Demo payments are paused for maintenance. Explore the merchant app meanwhile.";
-  if (await rewardsPaused()) return "Rewards are paused on this deployment right now.";
+  if (env.KICKBACK_ENV !== "sandbox" || !env.DEMO_MODE)
+    return { reason: "off", message: "The live demo is turned off on this deployment." };
+  if (await demoPathsOff())
+    return { reason: "off", message: "Demo payments are paused for maintenance. Explore the merchant app meanwhile." };
+  if (await rewardsPaused()) return { reason: "off", message: "Rewards are paused on this deployment right now." };
   const rosa = await loadMerchant("rosas");
-  if (!rosa || rosa.rewardsPaused) return "The demo cafe isn't sending rewards right now.";
+  if (!rosa) return { reason: "broken", message: "The demo cafe isn't sending rewards right now." };
+  if (rosa.rewardsPaused) return { reason: "off", message: "The demo cafe isn't sending rewards right now." };
   if ((await budgetLeftCents("rosas")) < rosa.spec.rewardCents)
-    return "The demo cafe has used today's reward budget. Come back tomorrow, or explore the merchant app.";
+    return {
+      reason: "capacity",
+      message: "The demo cafe has used today's reward budget. Come back tomorrow, or explore the merchant app.",
+    };
   return undefined;
 }
-/** Why a run cannot start right now, or undefined. */
-export async function watchUnavailable() {
-  const env = getEnv();
-  const closed = await demoPaymentsUnavailable();
+async function watchClosed(): Promise<Closed | undefined> {
+  const closed = await paymentsClosed();
   if (closed) return closed;
   const [day] = await getDb()
     .select({ n: sql<number>`count(*)::int` })
     .from(demoRuns)
     .where(and(eq(demoRuns.kind, "watch"), gte(demoRuns.createdAt, new Date(Date.now() - 86400000))));
-  if (day.n >= env.DEMO_RUNS_PER_DAY) return "Today's live runs are used up. Here is the most recent one.";
+  if (day.n >= getEnv().DEMO_RUNS_PER_DAY)
+    return { reason: "capacity", message: "Today's live runs are used up. Here is the most recent one." };
   return undefined;
+}
+/** Why the paying paths are closed right now, or undefined. Shared by `/demo` and the actions. */
+export async function demoPaymentsUnavailable() {
+  return (await paymentsClosed())?.message;
+}
+/** Why a run cannot start right now, or undefined. */
+export async function watchUnavailable() {
+  return (await watchClosed())?.message;
 }
 
 export async function startDemoRun(ipKey: string): Promise<StartResult> {
-  const blocked = await watchUnavailable();
-  if (blocked) return { ok: false, error: blocked, lastRunId: await lastGoodRun() };
+  const blocked = await watchClosed();
+  if (blocked) return { ok: false, error: blocked.message, reason: blocked.reason, lastRunId: await lastGoodRun() };
   const [recent] = await getDb()
     .select({ n: sql<number>`count(*)::int` })
     .from(demoRuns)
     .where(and(eq(demoRuns.ipHash, ipKey), gte(demoRuns.createdAt, new Date(Date.now() - RUN_GAP_MS))));
   if (recent.n > 0)
-    return { ok: false, error: "You just ran the demo. Give it a few minutes, or watch your last run again.", lastRunId: await lastGoodRun() };
+    return {
+      ok: false,
+      error: "You just ran the demo. Give it a few minutes, or watch your last run again.",
+      reason: "capacity",
+      lastRunId: await lastGoodRun(),
+    };
   const id = randomUUID(),
     buyer = await reserveBuyer("watch", "run:" + id);
   if (!buyer)
     return {
       ok: false,
       error: "The demo customers are getting ready again. Try “Pay as a customer”, or watch the most recent run.",
+      reason: "capacity",
       lastRunId: await lastGoodRun(),
     };
   const merchant = await loadMerchant(buyer.merchantSlug);
   if (!merchant || merchant.rewardsPaused) {
     await coolBuyer(buyer.slot, false);
-    return { ok: false, error: "The demo cafe isn't taking payments right now.", lastRunId: await lastGoodRun() };
+    return {
+      ok: false,
+      error: "The demo cafe isn't taking payments right now.",
+      reason: merchant ? "off" : "broken",
+      lastRunId: await lastGoodRun(),
+    };
   }
   await getDb().insert(demoRuns).values({ id, kind: "watch", ipHash: ipKey, buyerSlot: buyer.slot });
   return { ok: true, id };
