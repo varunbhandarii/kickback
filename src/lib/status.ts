@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { aiCalls, rewards, soakRuns, webhookEvents } from "@/db/schema";
+import { aiCalls, connections, rewards, soakRuns, webhookEvents } from "@/db/schema";
 import { aiEnabled, budgetPausedUntil } from "./ai/client";
 import { getEnv } from "./env";
 import { lastBeat } from "./heartbeat";
@@ -71,12 +71,20 @@ export async function serviceStatus(now = new Date()) {
   });
   const jobs = await lastBeat("jobs");
   rows.push({ key: "jobs", label: "Background jobs", health: fresh(jobs, now, 15 * MIN), value: ago(jobs, now) });
-  const reconcile = await lastBeat("reconcile");
+  // Reconciliation runs from the cron every few hours and from the nightly workflow when it starts.
+  const [reconciled] = await getDb()
+    .select({ at: sql<Date | null>`max(${connections.lastReconciledAt})` })
+    .from(connections)
+    .where(eq(connections.status, "CONNECTED"));
+  const beatAt = await lastBeat("reconcile"),
+    reconciledAt = [beatAt, reconciled?.at ? new Date(reconciled.at) : undefined]
+      .filter((d): d is Date => Boolean(d))
+      .reduce<Date | undefined>((a, b) => (!a || b > a ? b : a), undefined);
   rows.push({
     key: "reconcile",
-    label: "Nightly reconcile",
-    health: fresh(reconcile, now, 26 * HOUR),
-    value: ago(reconcile, now),
+    label: "History reconcile",
+    health: fresh(reconciledAt, now, 26 * HOUR),
+    value: ago(reconciledAt, now),
   });
   const [sent] = await getDb()
     .select({ at: sql<Date | null>`max(${rewards.sentAt})` })

@@ -26,6 +26,7 @@ import {
 } from "./classify";
 import { persistHistoryItem } from "./persist";
 import { computeHistoryStats } from "./stats";
+import { beat } from "../heartbeat";
 type SearchPage = {
   account_number?: string;
   transaction_details?: SearchRow[];
@@ -459,6 +460,9 @@ export async function runBackfill(
           unrecognized: stats.unrecognizedPayments,
         });
       });
+      // The cron's sweep and the nightly workflow both finish here.
+      if (run.kind === "RECONCILE")
+        await beat("reconcile", getEnv().BETTERSTACK_RECONCILE_HEARTBEAT_URL).catch(() => undefined);
       return { claimed: true, done: true };
     }
     await getDb()

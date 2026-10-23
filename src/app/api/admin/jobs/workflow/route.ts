@@ -7,9 +7,13 @@ export async function POST(req: Request) {
     return Response.json(await triggerReconcile(), {
       headers: { "Cache-Control": "no-store" },
     });
-  } catch {
+  } catch (e) {
+    // Operator-only: say why so a revoked key or wrong slug is obvious.
     return Response.json(
-      { error: "Workflow unavailable; cron fallback remains active" },
+      {
+        error: "Workflow unavailable; cron fallback remains active",
+        cause: e instanceof Error ? `${e.name}: ${e.message}`.slice(0, 300) : "unknown",
+      },
       { status: 502 },
     );
   }

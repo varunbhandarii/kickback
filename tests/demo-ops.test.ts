@@ -80,7 +80,11 @@ describe("demo operations", () => {
     const m = await fixture();
     await upsertBuyer({ slot: 3, email: "kb-demo-3@example.com" }, "VAULT-SECRET-ID");
     await beat("jobs");
+    expect((await serviceStatus()).rows.find((r) => r.key === "reconcile")?.health).toBe("warn");
+    // A reconciliation from the cron's sweep counts, not only the nightly workflow's.
+    await getDb().update(connections).set({ lastReconciledAt: new Date() }).where(eq(connections.merchantId, m.id));
     const status = await serviceStatus();
+    expect(status.rows.find((r) => r.key === "reconcile")).toMatchObject({ health: "ok", value: "just now" });
     const text = JSON.stringify(status);
     expect(status.rows.find((r) => r.key === "database")?.health).toBe("ok");
     expect(status.rows.find((r) => r.key === "jobs")?.health).toBe("ok");
