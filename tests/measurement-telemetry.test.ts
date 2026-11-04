@@ -3,7 +3,7 @@ vi.mock("@/lib/dal", () => ({ getSession: vi.fn(), ownedMerchant: vi.fn() }));
 import { and, eq, sql } from "drizzle-orm";
 import { setupDb, resetDb, teardownDb, fixture, purchase } from "./helpers/db";
 import { getDb } from "@/db";
-import { visits, programs } from "@/db/schema";
+import { aiCalls, visits, programs } from "@/db/schema";
 import { cohortQuery } from "@/lib/studio/cohorts";
 import { querySchema } from "@/lib/studio/query";
 import { studioQuery } from "@/lib/studio/server-data";
@@ -179,4 +179,15 @@ it("returns zero-filled Analyst usage days", async () => {
     }),
   );
   expect(result.data).toHaveLength(30);
+  // Read-only demo visitors' turns count toward neither runs nor cost.
+  await getDb().insert(aiCalls).values([
+    { merchantId: m.id, feature: "analyst", model: "m", inputTokens: 1000000, actorKind: "owner" },
+    { merchantId: m.id, feature: "analyst", model: "m", inputTokens: 1000000, actorKind: "viewer", actorKey: "v" },
+  ]);
+  const usage = await studioQuery(
+    m,
+    querySchema.parse({ table: "ai_usage", fields: ["ai_usage.day", "ai_usage.cost_cents"] }),
+  );
+  const cost = (usage.data as { cost_cents: number | string }[]).reduce((s, r) => s + Number(r.cost_cents), 0);
+  expect(cost).toBeCloseTo(4);
 });
