@@ -142,6 +142,7 @@ export default function StudioHost({
           onStateUpdated={update}
           onErrorRaised={error}
           onApiReady={ready}
+          style={{ height: "100%" }}
         />
       </div>
     </AgStudioProvider>

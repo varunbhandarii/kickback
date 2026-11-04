@@ -51,7 +51,8 @@ export default async function CockpitPage() {
     invalid = false;
   if (saved)
     try {
-      state = validateState(saved.state);
+      // A saved layout keeps its pages; the Cockpit always opens on Loyalty.
+      state = { ...validateState(saved.state), selectedPageId: "loyalty" };
     } catch {
       invalid = true;
     }

@@ -2646,6 +2646,14 @@ pre.code {
 .cockpit {
   min-width: 0;
 }
+/* The read-only demo banner sits above the cockpit header. */
+.cockpit-shell:has(.demo-banner) .studio-surface {
+  height: calc(100dvh - 65px - 56px);
+}
+/* Studio sizes itself from its 600 px default; fill the surface instead. */
+.studio-surface .ag-studio-root {
+  height: 100%;
+}
 .studio-surface {
   height: calc(100dvh - 65px);
   min-height: 640px;
