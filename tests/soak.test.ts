@@ -39,6 +39,8 @@ describe("daily end-to-end check", () => {
     expect(ok.steps.map((s) => s.name)).toEqual(["status", "watch-run", "metrics", "analyst", "demo-page"]);
     expect(ok.steps.find((s) => s.name === "analyst")?.detail).toMatch(/skipped/);
     expect(await lastBeat("soak")).toBeInstanceOf(Date);
+    // The check always leaves the last ready watch customer for visitors.
+    expect(m.start).toHaveBeenCalledWith("soak", { keepOneForVisitors: true });
     m.start.mockResolvedValueOnce({ ok: false, reason: "capacity", error: "The demo customers are getting ready again." });
     const busy = await runSoak();
     expect(busy.ok).toBe(true);

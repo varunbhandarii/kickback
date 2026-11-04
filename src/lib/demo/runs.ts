@@ -8,7 +8,7 @@ import { replayOnce } from "../payments/replay";
 import { rewardsPaused, settleReward } from "../rewards/executor";
 import type { Progress } from "../engine/evaluate";
 import { customerBudget } from "../rewards/enqueue";
-import { DEMO_TICKET_CENTS, buyerVault, coolBuyer, reserveBuyer } from "./buyers";
+import { DEMO_TICKET_CENTS, buyerVault, coolBuyer, readyCount, reserveBuyer } from "./buyers";
 
 export const RUN_STATES = [
   "queued",
@@ -107,7 +107,12 @@ export async function watchUnavailable() {
   return (await watchClosed())?.message;
 }
 
-export async function startDemoRun(ipKey: string): Promise<StartResult> {
+/** Pay customers lend themselves to watch runs only while this many are ready. */
+const PAY_FALLBACK_MIN = 3;
+export async function startDemoRun(
+  ipKey: string,
+  options: { keepOneForVisitors?: boolean } = {},
+): Promise<StartResult> {
   const blocked = await watchClosed();
   if (blocked) return { ok: false, error: blocked.message, reason: blocked.reason, lastRunId: await lastGoodRun() };
   const [recent] = await getDb()
@@ -121,8 +126,19 @@ export async function startDemoRun(ipKey: string): Promise<StartResult> {
       reason: "capacity",
       lastRunId: await lastGoodRun(),
     };
-  const id = randomUUID(),
-    buyer = await reserveBuyer("watch", "run:" + id);
+  // The daily check never takes the last ready watch customer from visitors.
+  if (options.keepOneForVisitors && (await readyCount("watch")) < 2)
+    return {
+      ok: false,
+      error: "Leaving the last ready demo customer for visitors.",
+      reason: "capacity",
+      lastRunId: await lastGoodRun(),
+    };
+  const id = randomUUID();
+  let buyer = await reserveBuyer("watch", "run:" + id);
+  // Visitors' runs borrow a ready pay customer when every watch customer is resting.
+  if (!buyer && !options.keepOneForVisitors && (await readyCount("pay")) >= PAY_FALLBACK_MIN)
+    buyer = await reserveBuyer("pay", "run:" + id);
   if (!buyer)
     return {
       ok: false,

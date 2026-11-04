@@ -150,7 +150,7 @@ export async function serviceStatus(now = new Date()) {
     key: "cockpit",
     label: "Cockpit",
     health: licensed ? "ok" : "info",
-    value: licensed ? "licensed" : "running on a trial licence (watermark shown)",
+    value: licensed ? "licensed" : "no licence key (watermark shown)",
   });
   const throttles = await recentThrottles(now);
   rows.push({

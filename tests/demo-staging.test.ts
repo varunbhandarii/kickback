@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { demoBuyers, rewards, visits } from "@/db/schema";
+import { demoBuyers, demoRuns, rewards, visits } from "@/db/schema";
 import { localDay } from "@/lib/engine/evaluate";
 import { fixture, purchase, resetDb, setupDb, teardownDb } from "./helpers/db";
 const state = vi.hoisted(() => ({ merchant: undefined as unknown, account: "DEMO_BUYER_ONE" }));
@@ -69,6 +69,7 @@ describe("demo buyer staging and live runs", () => {
   afterAll(teardownDb);
   beforeEach(async () => {
     await resetDb();
+    await getDb().delete(demoRuns);
     await getDb().delete(demoBuyers);
     state.merchant = await fixture();
   });
@@ -145,6 +146,33 @@ describe("demo buyer staging and live runs", () => {
     expect(pass).toMatchObject({ staged: 0 });
     expect((await key()).notes).toMatch(/cap/);
     expect((await key()).status).toBe("cooling");
+  });
+  it("keeps the last watch customer for visitors and lends pay customers only when plenty are ready", async () => {
+    await upsertBuyer({ slot: 0, email: "kb-demo-0@example.com", purpose: "watch", published: false }, "VAULT-0");
+    await getDb().update(demoBuyers).set({ status: "ready" });
+    // The daily check leaves the only ready watch customer alone; a visitor gets it.
+    expect(await startDemoRun("soak", { keepOneForVisitors: true })).toMatchObject({
+      ok: false,
+      reason: "capacity",
+      error: expect.stringMatching(/last ready demo customer/),
+    });
+    const first = await startDemoRun("visitor-a");
+    expect(first).toMatchObject({ ok: true });
+    const slotOf = async (id: string) =>
+      (await getDb().select().from(demoRuns).where(eq(demoRuns.id, id)))[0].buyerSlot;
+    if (first.ok) expect(await slotOf(first.id)).toBe(0);
+    // With the watch customer busy, two ready pay customers are not enough to lend one.
+    for (const slot of [1, 2])
+      await upsertBuyer({ slot, email: `kb-demo-${slot}@example.com`, purpose: "pay" }, `VAULT-${slot}`);
+    await getDb().update(demoBuyers).set({ status: "ready" }).where(eq(demoBuyers.purpose, "pay"));
+    expect(await startDemoRun("visitor-b")).toMatchObject({ ok: false, reason: "capacity" });
+    await upsertBuyer({ slot: 3, email: "kb-demo-3@example.com", purpose: "pay" }, "VAULT-3");
+    await getDb().update(demoBuyers).set({ status: "ready" }).where(eq(demoBuyers.slot, 3));
+    // The daily check never borrows; a visitor does.
+    expect(await startDemoRun("soak", { keepOneForVisitors: true })).toMatchObject({ ok: false });
+    const borrowed = await startDemoRun("visitor-c");
+    expect(borrowed).toMatchObject({ ok: true });
+    if (borrowed.ok) expect([1, 2, 3]).toContain(await slotOf(borrowed.id));
   });
   it("reserves one buyer per holder and returns expired holds to the pool", async () => {
     await upsertBuyer({ slot: 1, email: "kb-demo-1@example.com", purpose: "pay" }, "VAULT-1");

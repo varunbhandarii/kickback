@@ -49,7 +49,7 @@ export async function runSoak() {
     return status.overall;
   });
   await check("watch-run", async () => {
-    const started = await startDemoRun("soak");
+    const started = await startDemoRun("soak", { keepOneForVisitors: true });
     // Visitors using up the watch customers, or an operator pause, is not an outage.
     if (!started.ok && started.reason !== "broken") return `skipped: ${started.error}`;
     if (!started.ok) throw new Error(started.error);

@@ -191,6 +191,21 @@ export async function coolBuyer(slot: number, rewarded: boolean, note?: string) 
     })
     .where(eq(demoBuyers.slot, slot));
 }
+/** Buyers ready to be handed out for one purpose (pay counts only published ones). */
+export async function readyCount(purpose: "pay" | "watch") {
+  const [row] = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(demoBuyers)
+    .where(
+      and(
+        eq(demoBuyers.purpose, purpose),
+        eq(demoBuyers.status, "ready"),
+        isNotNull(demoBuyers.vaultEnc),
+        ...(purpose === "pay" ? [eq(demoBuyers.published, true)] : []),
+      ),
+    );
+  return row.n;
+}
 export async function poolCounts() {
   const rows = await getDb()
     .select({
