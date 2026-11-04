@@ -4,6 +4,13 @@ Payment-linked loyalty for small merchants on PayPal and Venmo.
 
 Pay at a merchant, collect qualifying visits, and receive a thank-you partial refund when you earn a reward. Returning wallets are recognized without a separate customer account. The current deployment uses **sandbox accounts and test balances only**.
 
+**[Try the demo](https://kickback-web.onrender.com/demo)** · [Service status](https://kickback-web.onrender.com/status) · [API documentation](https://documenter.getpostman.com/view/59031656/2sBYHSxfXm)
+
+<p>
+  <img src="docs/images/pay-page.png" alt="Rosa's Cafe pay page on a phone: every 5th visit, $2 back, pay with PayPal or Venmo" height="380">
+  <img src="docs/images/live-run.png" alt="A live sandbox run: the customer pays $5.50, Kickback counts visit 5 of 5, Guard clears the reward, and PayPal confirms the $2 partial refund" height="380">
+</p>
+
 ## Try it
 
 Open the [demo page](https://kickback-web.onrender.com/demo) and pick one of three paths. Everything runs in PayPal sandbox with test balances.
@@ -21,6 +28,11 @@ Create a [merchant account](https://kickback-web.onrender.com/sign-up), add your
 Activate a visit or spending preset, edit the menu, and download a pay sign or QR. The merchant area includes customer codes, rewards, limits, staff exclusion, and pause/resume controls. Disconnect stops checkout and future rewards immediately and schedules customer/payment data and connection credentials for deletion within 48 hours. Printed pay links lock after the first download.
 
 Email/password sign-in works independently of email delivery. Password reset, verification, single-use sign-in links, and co-owner invitations require a configured email sender. Optional PayPal sign-in requires its separate callback configuration. See [setup](docs/setup.md).
+
+<p>
+  <img src="docs/images/rewards.png" alt="Merchant rewards list: every reward is a partial refund with its PayPal refund ID" width="49%">
+  <img src="docs/images/cockpit-analyst.png" alt="AG Studio cockpit with the Analyst answering which regulars are closest to their next reward" width="49%">
+</p>
 
 ## Cockpit
 
@@ -65,6 +77,20 @@ flowchart LR
   Refund --> Webhook[Verified webhook or reconciliation]
   Webhook --> Progress[Reward status on the pay page]
 ```
+
+### PayPal APIs used
+
+| PayPal API | What Kickback does with it | Code |
+|---|---|---|
+| JavaScript SDK v6 (PayPal and Venmo) | Customer checkout on the pay page | `src/app/pay/[slug]/pay-client.tsx` |
+| Orders v2 | Creates and captures each payment; the payer's wallet on the order becomes a merchant-specific HMAC key | `src/lib/payments/create.ts`, `src/lib/payments/capture.ts` |
+| Payments v2 refunds | Sends each reward as a partial refund of the qualifying capture, with `note_to_payer` and a persisted `PayPal-Request-Id` | `src/lib/rewards/executor.ts` |
+| Webhooks and signature verification | Captures, refunds, reversals and disputes update visits and rewards | `src/lib/paypal/webhooks.ts`, `src/lib/webhooks/dispatch.ts` |
+| Partner Referrals v2 and `PayPal-Auth-Assertion` | Merchant consent; API calls run on the merchant's behalf | `src/lib/paypal/referrals.ts`, `src/lib/paypal/client.ts` |
+| Transaction Search | Reads up to 90 days of sales for history, backtests and reconciliation | `src/lib/history/worker.ts` |
+| Vault v3 setup tokens | Saved sandbox wallets for the demo customers behind "Watch a reward happen" | `src/lib/demo/vault.ts` |
+| Server SDK (`@paypal/paypal-server-sdk`) | Order lookup | `src/lib/paypal/order-lookup.ts` |
+| Log in with PayPal (optional) | Merchant sign-in | `src/lib/paypal/identity-profile.ts` |
 
 The database commits a reward before an immediate background attempt. A five-minute worker recovers interrupted work. A unique reward per visit and persisted PayPal request IDs prevent duplicate payouts. Returned purchases cancel unpaid rewards or offset future rewards; disputes freeze eligibility. Merchant and global switches pause new refund attempts.
 
@@ -113,5 +139,9 @@ The PayPal Context Plugin from APIMatic guided the server SDK order-lookup integ
 Responses include HSTS, nosniff, no-referrer, Permissions-Policy, popup-compatible COOP and frame protection. CSP is report-only; when configured, a first-party relay removes query strings before forwarding violations to Sentry. Private progress links expire and are rate-limited. Tokens are bearer links: anyone holding one can read its summary.
 
 This is a sandbox demonstration, not a live-approved payments platform. Live use requires provider approval for the integration and reward model, operational and policy review, production credentials and licensing. See [live readiness](docs/live-readiness.md), [merchant reports FAQ](docs/merchant-faq.md) and [privacy](docs/privacy.md). Free in sandbox; no contract, no hardware, no customer app. Live pricing will be announced before launch.
+
+## Team
+
+Built by Varun Bhandari and Chaitanya Manik for the PayPal AI Hackathon, October–November 2026.
 
 [MIT license](LICENSE)
