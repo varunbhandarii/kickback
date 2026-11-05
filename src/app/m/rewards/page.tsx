@@ -40,6 +40,7 @@ const views = [
 ] as const;
 type Explanation = {
   explanation?: string;
+  aiCallIds?: string[];
   suggested_rule_change?: {
     field: string;
     from: number;
@@ -356,7 +357,9 @@ export default async function RewardsPage({
                         className="eyebrow"
                         style={{ color: "var(--forest)" }}
                       >
-                        AI explanation, checked against these signals
+                        {explanation.aiCallIds?.length
+                          ? "AI explanation, checked against these signals"
+                          : "Guard's signals in plain words"}
                       </span>
                       <p style={{ fontSize: 14, lineHeight: 1.55 }}>
                         {explanation.explanation}
