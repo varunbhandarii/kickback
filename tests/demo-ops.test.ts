@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { connections, merchantUsers, merchants, user } from "@/db/schema";
+import { connections, demoBuyers, merchantUsers, merchants, user } from "@/db/schema";
 import { fixture, resetDb, setupDb, teardownDb } from "./helpers/db";
 import { PayPalScheduler, THROTTLE_PAUSE_MS } from "@/lib/paypal/pacing";
 import { disconnectMerchant, ProtectedDemoTenant } from "@/lib/merchant-actions";
@@ -91,6 +91,17 @@ describe("demo operations", () => {
     expect(text).not.toMatch(/@|VAULT|MERCHANT12345/);
     expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     expect(text).not.toContain(m.id);
+    // No watch customer ready but plenty of paying ones: live runs still work.
+    await getDb().update(demoBuyers).set({ status: "ready" });
+    for (const slot of [4, 5, 6]) await upsertBuyer({ slot, email: `kb-demo-${slot}@example.com`, purpose: "pay" }, "VAULT-" + slot);
+    await getDb().update(demoBuyers).set({ status: "ready" }).where(eq(demoBuyers.purpose, "pay"));
+    await getDb().update(demoBuyers).set({ status: "cooling" }).where(eq(demoBuyers.purpose, "watch"));
+    expect((await serviceStatus()).rows.find((r) => r.key === "demo_buyers")).toMatchObject({
+      health: "ok",
+      value: expect.stringMatching(/^4 for paying, 0 for watching, live runs use a paying one/),
+    });
+    await getDb().update(demoBuyers).set({ status: "cooling" }).where(inArray(demoBuyers.slot, [5, 6]));
+    expect((await serviceStatus()).rows.find((r) => r.key === "demo_buyers")?.health).toBe("warn");
   });
   it("records heartbeats even when the uptime monitor is unreachable", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));

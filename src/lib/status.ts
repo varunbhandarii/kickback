@@ -9,7 +9,7 @@ import { rewardsPaused } from "./rewards/executor";
 import { recentThrottles } from "./paypal/throttle-log";
 import { loadMerchant } from "./merchants";
 import { customerBudget } from "./rewards/enqueue";
-import { demoPathsOff } from "./demo/runs";
+import { PAY_FALLBACK_MIN, demoPathsOff } from "./demo/runs";
 
 export type Health = "ok" | "warn" | "down" | "info";
 export type StatusRow = { key: string; label: string; health: Health; value: string };
@@ -119,13 +119,15 @@ export async function serviceStatus(now = new Date()) {
   if (env.KICKBACK_ENV === "sandbox") {
     const pool = await poolCounts(),
       off = await demoPathsOff();
+    // Live runs borrow a paying customer while every watch customer is resting.
+    const borrowing = pool.watchReady === 0 && pool.payReady >= PAY_FALLBACK_MIN;
     rows.push({
       key: "demo_buyers",
       label: "Demo customers ready",
-      health: off ? "warn" : pool.payReady >= 2 && pool.watchReady >= 1 ? "ok" : "warn",
+      health: off ? "warn" : pool.payReady >= 2 && (pool.watchReady >= 1 || borrowing) ? "ok" : "warn",
       value: off
         ? "demo payments paused"
-        : `${pool.payReady} for paying, ${pool.watchReady} for watching (${pool.payReserved} in use)`,
+        : `${pool.payReady} for paying, ${pool.watchReady} for watching${borrowing ? ", live runs use a paying one" : ""} (${pool.payReserved} in use)`,
     });
   }
   const budgetUntil = await budgetPausedUntil(now);

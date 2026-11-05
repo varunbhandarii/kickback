@@ -108,7 +108,7 @@ export async function watchUnavailable() {
 }
 
 /** Pay customers lend themselves to watch runs only while this many are ready. */
-const PAY_FALLBACK_MIN = 3;
+export const PAY_FALLBACK_MIN = 3;
 export async function startDemoRun(
   ipKey: string,
   options: { keepOneForVisitors?: boolean } = {},
